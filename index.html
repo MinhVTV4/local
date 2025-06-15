@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.3 - Cải tiến Gom Nhóm</title>
+    <title>Theo Dõi Vị Trí v5.4 - Quản lý Nhóm lớn</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -53,7 +53,7 @@
         </div>
     </div>
     
-    <!-- Create Group Modal -->
+    <!-- Modals -->
     <div id="create-group-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
             <h2 class="text-2xl font-bold mb-4">Tạo Nhóm Mới</h2>
@@ -66,7 +66,6 @@
         </div>
     </div>
 
-    <!-- Join Group Modal -->
     <div id="join-group-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
             <h2 class="text-2xl font-bold mb-4">Tham Gia Nhóm</h2>
@@ -78,7 +77,7 @@
             </div>
         </div>
     </div>
-
+    
     <!-- Main Application Screen -->
     <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
          <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
@@ -88,9 +87,7 @@
                 <div>
                      <div class="flex items-center justify-between mb-2">
                         <h2 id="group-name-display" class="text-2xl font-bold text-gray-900 truncate"></h2>
-                        <button id="rename-group-btn" class="hidden text-gray-500 hover:text-blue-600 p-1" title="Đổi tên nhóm">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                        </button>
+                        <button id="rename-group-btn" class="hidden text-gray-500 hover:text-blue-600 p-1" title="Đổi tên nhóm"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
                     </div>
 
                     <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg mb-4">
@@ -111,19 +108,13 @@
                          <h3 class="font-semibold text-lg mb-2 text-gray-800">Tên hiển thị</h3>
                          <div id="display-name-view" class="flex items-center justify-between">
                             <span id="device-name-display" class="text-gray-900 font-medium"></span>
-                            <button id="edit-name-btn" class="text-gray-500 hover:text-blue-600 p-1" title="Đổi tên">
-                               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                            </button>
+                            <button id="edit-name-btn" class="text-gray-500 hover:text-blue-600 p-1" title="Đổi tên"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
                          </div>
                          <div id="edit-name-view" class="hidden">
                              <div class="flex gap-2">
                                 <input type="text" id="device-name-input" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <button id="save-name-button" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-md transition" title="Lưu">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                </button>
-                                <button id="cancel-edit-name-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 p-2 rounded-md transition" title="Hủy">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                                </button>
+                                <button id="save-name-button" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-md transition" title="Lưu"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></button>
+                                <button id="cancel-edit-name-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 p-2 rounded-md transition" title="Hủy"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></button>
                              </div>
                          </div>
                     </div>
@@ -131,18 +122,8 @@
                 </div>
 
                 <div class="flex flex-col min-h-0 mt-4">
-                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên nhóm</h3>
-                    <div class="mb-3">
-                        <input type="search" id="search-user-input" placeholder="Tìm thành viên..." class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <div id="status-filter-buttons" class="mt-2 flex border border-gray-200 rounded-md">
-                            <button data-status="all" class="flex-1 text-xs py-1 px-2 bg-blue-500 text-white rounded-l-md">Tất cả</button>
-                            <button data-status="online" class="flex-1 text-xs py-1 px-2 border-l border-r border-gray-200">Trực tuyến</button>
-                            <button data-status="offline" class="flex-1 text-xs py-1 px-2 rounded-r-md">Ngoại tuyến</button>
-                        </div>
-                    </div>
-                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[200px]">
-                        <ul id="user-list" class="space-y-3"></ul>
-                    </div>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên (<span id="member-count">0</span>)</h3>
+                    <button id="manage-members-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Quản lý Thành viên</button>
                 </div>
             </div>
 
@@ -160,7 +141,34 @@
         </div>
     </div>
     
-    <div id="notification-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center"><p id="notification-message" class="text-lg mb-4 text-gray-800"></p><button onclick="document.getElementById('notification-modal').classList.add('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Đã hiểu</button></div></div>
+    <!-- Members Modal -->
+    <div id="members-modal" class="hidden fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h2 class="text-2xl font-bold">Quản lý Thành viên</h2>
+                <button id="close-members-modal-btn" class="p-2">&times;</button>
+            </div>
+            <div class="p-4">
+                <input type="search" id="modal-search-user-input" placeholder="Tìm thành viên..." class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="mt-2 flex justify-between items-center">
+                    <div id="modal-status-filter-buttons" class="flex border border-gray-200 rounded-md">
+                        <button data-status="all" class="flex-1 text-xs py-1 px-2 bg-blue-500 text-white rounded-l-md">Tất cả</button>
+                        <button data-status="online" class="flex-1 text-xs py-1 px-2 border-l border-r border-gray-200">Trực tuyến</button>
+                        <button data-status="offline" class="flex-1 text-xs py-1 px-2 rounded-r-md">Ngoại tuyến</button>
+                    </div>
+                    <div id="view-toggle-buttons" class="flex border border-gray-200 rounded-md">
+                        <button data-view="list" class="p-1 bg-blue-500 text-white" title="Xem dạng danh sách">≡</button>
+                        <button data-view="grid" class="p-1" title="Xem dạng lưới">▦</button>
+                    </div>
+                </div>
+            </div>
+            <div id="modal-user-list-container" class="flex-1 p-4 overflow-y-auto">
+                <ul id="modal-user-list" class="space-y-3"></ul>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification-modal" class="hidden fixed inset-0 bg-black/60 z-[1001] flex items-center justify-center p-4"><div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center"><p id="notification-message" class="text-lg mb-4 text-gray-800"></p><button onclick="document.getElementById('notification-modal').classList.add('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Đã hiểu</button></div></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
@@ -206,9 +214,14 @@
         const saveNameButton = document.getElementById('save-name-button');
         const cancelEditNameBtn = document.getElementById('cancel-edit-name-btn');
         const leaveGroupBtn = document.getElementById('leave-group-btn');
-        const searchUserInput = document.getElementById('search-user-input');
-        const statusFilterButtons = document.getElementById('status-filter-buttons');
-        const userList = document.getElementById('user-list');
+        const memberCountSpan = document.getElementById('member-count');
+        const manageMembersBtn = document.getElementById('manage-members-btn');
+        const membersModal = document.getElementById('members-modal');
+        const closeMembersModalBtn = document.getElementById('close-members-modal-btn');
+        const modalSearchUserInput = document.getElementById('modal-search-user-input');
+        const modalStatusFilterButtons = document.getElementById('modal-status-filter-buttons');
+        const viewToggleButtons = document.getElementById('view-toggle-buttons');
+        const modalUserList = document.getElementById('modal-user-list');
         const notificationModal = document.getElementById('notification-modal');
         const notificationMessage = document.getElementById('notification-message');
         const centerOnMeBtn = document.getElementById('center-on-me-btn');
@@ -219,6 +232,7 @@
         let db, auth, currentUser = null, currentGroup = null, map = null, markerClusterGroup = null;
         let mapObjects = {}, groupUnsubscribe = null, locationsUnsubscribe = null, wakeLock = null, lastPosition = null;
         let allUsersData = [];
+        let currentViewMode = 'list';
         const speedReadings = [], SMOOTHING_FACTOR = 5, PATH_ARCHIVE_THRESHOLD = 50, OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
@@ -269,11 +283,7 @@
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
-            // SỬA LỖI: Thêm tùy chọn spiderfyOnEveryClick
-            markerClusterGroup = L.markerClusterGroup({
-                spiderfyOnEveryClick: true,
-                showCoverageOnHover: false,
-            });
+            markerClusterGroup = L.markerClusterGroup({ spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true });
             map.addLayer(markerClusterGroup);
         }
         
@@ -441,10 +451,11 @@
         }
         
         function updateUserListUI(users) {
-            userList.innerHTML = '';
+            memberCountSpan.textContent = users.length;
+            modalUserList.innerHTML = '';
             const isOwner = currentUser.uid === currentGroup.ownerId;
-            const searchTerm = searchUserInput.value.toLowerCase();
-            const activeFilter = statusFilterButtons.querySelector('.bg-blue-500').dataset.status;
+            const searchTerm = modalSearchUserInput.value.toLowerCase();
+            const activeFilter = modalStatusFilterButtons.querySelector('.bg-blue-500').dataset.status;
 
             users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
@@ -454,27 +465,36 @@
                 if (!matchesSearch || !matchesStatus) return;
 
                 const li = document.createElement('li');
-                li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
-                const statusText = `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+                
                 const ownerIcon = user.id === currentGroup.ownerId ? '👑' : '';
                 let removeButton = '';
                 if(isOwner && !isCurrentUser) {
                     removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>`;
                 }
                 const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
-                li.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
-                           <div class="relative">
-                               <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
-                               <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
-                           </div>
-                            <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${statusText}</p></div>
-                        </div>
-                        ${removeButton}
-                    </div>
-                    <div class="mt-2 text-right"><button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition">Xem đầy đủ</button></div>`;
-                userList.appendChild(li);
+                
+                if (currentViewMode === 'grid') {
+                    li.className = 'p-2 rounded-md hover:bg-gray-100 cursor-pointer text-center';
+                    li.innerHTML = `<div class="relative inline-block" onclick="window.panToUser('${user.id}')">
+                                        <div class="w-16 h-16 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-2xl">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                                        <span class="absolute bottom-0 right-0 block h-4 w-4 rounded-full ${statusDotColor} border-2 border-white"></span>
+                                    </div>
+                                    <p class="font-semibold text-gray-800 text-sm mt-2 truncate">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>`;
+                } else {
+                     li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
+                     li.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
+                               <div class="relative">
+                                   <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                                   <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                               </div>
+                                <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${formatTimeAgo(user.timestamp)}</p></div>
+                            </div>
+                            ${removeButton}
+                        </div>`;
+                }
+                modalUserList.appendChild(li);
             });
         }
         
@@ -494,7 +514,12 @@
             } catch (error) { console.error(`Lỗi tải lịch sử:`, error); setButtonLoadingState(button, false, originalText); }
         };
 
-        window.panToUser = (userId) => { if (mapObjects[userId]?.marker) markerClusterGroup.zoomToShowLayer(mapObjects[userId].marker, () => mapObjects[userId].marker.openPopup()); };
+        window.panToUser = (userId) => { 
+            if (mapObjects[userId]?.marker) {
+                membersModal.classList.add('hidden'); // Close modal on selection
+                markerClusterGroup.zoomToShowLayer(mapObjects[userId].marker, () => mapObjects[userId].marker.openPopup());
+            }
+        };
         
         function calculateAndSmoothSpeed(newPosition) {
             if (!lastPosition) { lastPosition = newPosition; return 0; }
@@ -551,11 +576,8 @@
             if (!success) setButtonLoadingState(confirmJoinBtn, false, originalText);
         });
         leaveGroupBtn.addEventListener('click', () => { 
-            if (currentUser.uid === currentGroup.ownerId) {
-                deleteGroup();
-            } else {
-                if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); 
-            }
+            if (currentUser.uid === currentGroup.ownerId) deleteGroup();
+            else if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); 
         });
         renameGroupBtn.addEventListener('click', renameGroup);
         editNameBtn.addEventListener('click', () => { displayNameView.classList.add('hidden'); editNameView.classList.remove('hidden'); });
@@ -568,7 +590,6 @@
                 deviceNameDisplay.textContent = newName;
                 editNameView.classList.add('hidden');
                 displayNameView.classList.remove('hidden');
-                showNotification(`Tên đã được lưu thành "${newName}".`);
             }
         });
         copyLinkBtn.addEventListener('click', () => {
@@ -578,14 +599,30 @@
         });
         centerOnMeBtn.addEventListener('click', () => { if(currentUser?.uid && mapObjects[currentUser.uid]?.marker) map.setView(mapObjects[currentUser.uid].marker.getLatLng(), 16) });
         fitAllUsersBtn.addEventListener('click', () => { if (markerClusterGroup.getBounds().isValid()) map.fitBounds(markerClusterGroup.getBounds().pad(0.1)); });
-        searchUserInput.addEventListener('input', () => updateUserListUI(allUsersData));
-        statusFilterButtons.addEventListener('click', (e) => {
+        
+        // Modal Listeners
+        manageMembersBtn.addEventListener('click', () => membersModal.classList.remove('hidden'));
+        closeMembersModalBtn.addEventListener('click', () => membersModal.classList.add('hidden'));
+        modalSearchUserInput.addEventListener('input', () => updateUserListUI(allUsersData));
+        modalStatusFilterButtons.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON') {
-                statusFilterButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-blue-500', 'text-white'));
+                modalStatusFilterButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-blue-500', 'text-white'));
                 e.target.classList.add('bg-blue-500', 'text-white');
                 updateUserListUI(allUsersData);
             }
         });
+        viewToggleButtons.addEventListener('click', (e) => {
+            const view = e.target.closest('button')?.dataset.view;
+            if(view) {
+                currentViewMode = view;
+                viewToggleButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-blue-500', 'text-white'));
+                e.target.closest('button').classList.add('bg-blue-500', 'text-white');
+                if (view === 'grid') modalUserList.classList.add('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'gap-4');
+                else modalUserList.classList.remove('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'gap-4');
+                updateUserListUI(allUsersData);
+            }
+        });
+        
 
         // --- Initialization ---
         function main() {
