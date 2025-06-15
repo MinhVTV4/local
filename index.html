@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v4.1 - Hệ thống Nhóm</title>
+    <title>Theo Dõi Vị Trí v4.3 - Hệ thống Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -40,7 +40,6 @@
             <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Theo Dõi Nhóm</h1>
             <p class="text-lg text-gray-600 mb-8">Tạo một nhóm riêng tư để chia sẻ vị trí với gia đình và bạn bè.</p>
             <div class="space-y-4">
-                <!-- SỬA LỖI: Vô hiệu hóa các nút cho đến khi xác thực xong -->
                 <button id="create-group-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg disabled:bg-blue-400 disabled:cursor-not-allowed" disabled>Tạo Nhóm Mới</button>
                 <button id="join-group-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-gray-300 disabled:cursor-not-allowed" disabled>Tham Gia Nhóm</button>
             </div>
@@ -126,7 +125,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove, orderBy } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         const firebaseConfig = {
              apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
@@ -166,13 +165,17 @@
         // --- Global State ---
         let db, auth;
         let currentUser = null;
-        let currentGroup = null; // {id, code}
+        let currentGroup = null;
         let map = null;
         let mapObjects = {};
+        let locationsUnsubscribe = null;
+        let wakeLock = null;
+        // KHÔI PHỤC: Các biến cho tính toán tốc độ và lưu trữ
         let lastPosition = null;
         const speedReadings = [];
-        let wakeLock = null;
-        let locationsUnsubscribe = null; // To stop listening to old group
+        const SMOOTHING_FACTOR = 5; 
+        const PATH_ARCHIVE_THRESHOLD = 50;
+        const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
         function showNotification(message) {
@@ -192,138 +195,92 @@
             interval /= 24;
             return `${Math.floor(interval)} ngày trước`;
         }
-
-        function setLoadingState(isLoading, button, message = 'Đang xử lý...') {
-            if (isLoading) {
-                button.disabled = true;
-                const originalText = button.textContent;
-                button.textContent = message;
-                return originalText;
-            }
+        
+        function setButtonLoadingState(button, isLoading, originalText, loadingText = 'Đang xử lý...') {
+            button.disabled = isLoading;
+            button.textContent = isLoading ? loadingText : originalText;
         }
         
         // --- UI Transitions ---
-        function showAppScreen() {
-            authScreen.classList.add('hidden');
-            appScreen.classList.remove('hidden');
-        }
-        
-        function showAuthScreen() {
-            appScreen.classList.add('hidden');
-            authScreen.classList.remove('hidden');
-            joinGroupModal.classList.add('hidden');
-        }
+        function showAppScreen() { authScreen.classList.add('hidden'); appScreen.classList.remove('hidden'); }
+        function showAuthScreen() { appScreen.classList.add('hidden'); authScreen.classList.remove('hidden'); joinGroupModal.classList.add('hidden'); }
         
         // --- Main Application Logic ---
         function initializeAppForGroup() {
             showAppScreen();
-            
-            userIdDisplay.textContent = currentUser.uid;
+            userIdDisplay.textContent = currentUser.uid.substring(0, 8) + '...';
             groupCodeDisplay.textContent = currentGroup.code;
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
-
             if (!map) initializeMap();
             startWatchingLocation();
             startListeningToGroupMembers();
-            // initializeWakeLock(); // Wake lock can be initialized here if needed
+            initializeWakeLock();
         }
 
         function initializeMap() {
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
         async function createGroup() {
-            const originalText = setLoadingState(true, createGroupBtn, 'Đang tạo...');
+            const originalText = createGroupBtn.textContent;
+            setButtonLoadingState(createGroupBtn, true, originalText, 'Đang tạo...');
             const groupCode = `NHOM-${Math.floor(1000 + Math.random() * 9000)}`;
-            const groupCollection = collection(db, "groups");
-            
             try {
-                const newGroupRef = await addDoc(groupCollection, {
-                    ownerId: currentUser.uid,
-                    code: groupCode,
-                    members: [currentUser.uid],
-                    createdAt: serverTimestamp()
+                const newGroupRef = await addDoc(collection(db, "groups"), {
+                    ownerId: currentUser.uid, code: groupCode, members: [currentUser.uid], createdAt: serverTimestamp()
                 });
-
                 currentGroup = { id: newGroupRef.id, code: groupCode };
                 localStorage.setItem('groupId', currentGroup.id);
                 localStorage.setItem('groupCode', currentGroup.code);
-                
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
-
             } catch (error) {
                 console.error("Lỗi khi tạo nhóm:", error);
-                showNotification("Không thể tạo nhóm, vui lòng thử lại.");
-                createGroupBtn.disabled = false;
-                createGroupBtn.textContent = originalText;
+                setButtonLoadingState(createGroupBtn, false, originalText);
             }
         }
         
         async function joinGroup(groupCode) {
-            if (!groupCode) {
-                showNotification("Vui lòng nhập mã mời.");
-                return;
-            }
-            const originalText = setLoadingState(true, confirmJoinBtn, 'Đang kiểm tra...');
-            const groupQuery = query(collection(db, "groups"), where("code", "==", groupCode.toUpperCase()));
-            
+            if (!groupCode) { showNotification("Vui lòng nhập mã mời."); return; }
+            const originalText = confirmJoinBtn.textContent;
+            setButtonLoadingState(confirmJoinBtn, true, originalText, 'Đang kiểm tra...');
             try {
-                const querySnapshot = await getDocs(groupQuery);
+                const q = query(collection(db, "groups"), where("code", "==", groupCode.toUpperCase()));
+                const querySnapshot = await getDocs(q);
                 if (querySnapshot.empty) {
-                    showNotification("Mã nhóm không tồn tại. Vui lòng kiểm tra lại.");
-                    confirmJoinBtn.disabled = false;
-                    confirmJoinBtn.textContent = "Xác nhận";
+                    showNotification("Mã nhóm không tồn tại.");
+                    setButtonLoadingState(confirmJoinBtn, false, originalText);
                     return;
                 }
-                
                 const groupDoc = querySnapshot.docs[0];
                 currentGroup = { id: groupDoc.id, code: groupDoc.data().code };
-
-                await updateDoc(doc(db, "groups", currentGroup.id), {
-                    members: arrayUnion(currentUser.uid)
-                });
-
+                await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayUnion(currentUser.uid) });
                 localStorage.setItem('groupId', currentGroup.id);
                 localStorage.setItem('groupCode', currentGroup.code);
-                
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
-
             } catch(error) {
                 console.error("Lỗi khi tham gia nhóm:", error);
-                showNotification("Không thể tham gia nhóm. Vui lòng thử lại.");
-                 confirmJoinBtn.disabled = false;
-                 confirmJoinBtn.textContent = "Xác nhận";
+                setButtonLoadingState(confirmJoinBtn, false, originalText);
             }
         }
         
         async function leaveGroup() {
             if (!currentGroup) return;
-
-            try {
-                const groupDocRef = doc(db, "groups", currentGroup.id);
-                await updateDoc(groupDocRef, {
-                    members: arrayRemove(currentUser.uid)
-                });
-            } catch(error) {
-                console.error("Lỗi khi rời nhóm:", error);
-            }
-
+            try { await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayRemove(currentUser.uid) }); } 
+            catch(error) { console.error("Lỗi khi rời nhóm:", error); }
             if (locationsUnsubscribe) locationsUnsubscribe();
             localStorage.removeItem('groupId');
             localStorage.removeItem('groupCode');
             currentGroup = null;
             Object.values(mapObjects).forEach(({marker, polyline}) => {
-                if (marker) map.removeLayer(marker);
-                if (polyline) map.removeLayer(polyline);
+                if (marker) map.removeLayer(marker); if (polyline) map.removeLayer(polyline);
             });
             mapObjects = {};
-            
             showAuthScreen();
         }
 
@@ -331,68 +288,64 @@
             const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
             const docSnap = await getDoc(locationDocRef);
             if (!docSnap.exists()) {
-                await setDoc(locationDocRef, {
-                    name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
-                    timestamp: serverTimestamp(),
-                    path: []
+                await setDoc(locationDocRef, { name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh', timestamp: serverTimestamp(), path: [] });
+            }
+        }
+        
+        // KHÔI PHỤC: Logic Wake Lock
+        const requestWakeLock = async () => {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => { updateWakeLockButtonUI(false); wakeLock = null; });
+                updateWakeLockButtonUI(true);
+            } catch (err) { console.error(`${err.name}, ${err.message}`); }
+        };
+        const releaseWakeLock = async () => { if (!wakeLock) return; await wakeLock.release(); wakeLock = null; updateWakeLockButtonUI(false); };
+        function updateWakeLockButtonUI(isLocked) {
+             if (isLocked) { wakeLockBtn.classList.add('text-yellow-500', 'bg-gray-200'); } 
+             else { wakeLockBtn.classList.remove('text-yellow-500', 'bg-gray-200'); }
+        }
+        function initializeWakeLock() {
+            if ('wakeLock' in navigator) {
+                wakeLockBtn.classList.remove('hidden');
+                wakeLockBtn.addEventListener('click', () => {
+                    const isLocking = !wakeLock;
+                    localStorage.setItem('wakeLockEnabled', isLocking);
+                    if(isLocking) requestWakeLock();
+                    else releaseWakeLock();
+                });
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible' && localStorage.getItem('wakeLockEnabled') === 'true') { requestWakeLock(); }
                 });
             }
         }
-
+        
+        // --- Realtime Logic ---
         function startListeningToGroupMembers() {
             if (locationsUnsubscribe) locationsUnsubscribe(); 
-            
             const locationsCollection = collection(db, `groups/${currentGroup.id}/locations`);
             locationsUnsubscribe = onSnapshot(locationsCollection, (snapshot) => {
-                const activeUserIds = new Set();
-                snapshot.docs.forEach(doc => {
-                    activeUserIds.add(doc.id);
-                    updateUserOnMap(doc.id, doc.data());
-                });
-
-                Object.keys(mapObjects).forEach(userId => {
-                    if (!activeUserIds.has(userId)) removeUserFromMap(userId);
-                });
-                
+                const activeUserIds = new Set(snapshot.docs.map(d => d.id));
+                snapshot.docs.forEach(d => updateUserOnMap(d.id, d.data()));
+                Object.keys(mapObjects).forEach(userId => { if (!activeUserIds.has(userId)) removeUserFromMap(userId); });
                 updateUserListUI(snapshot.docs.map(d => ({id: d.id, ...d.data()})));
             });
         }
         
         function updateUserOnMap(userId, userData) {
             if (!map || !userData.path || userData.path.length === 0) return;
-            const path = userData.path;
-            const lastPoint = path[path.length - 1];
-            const latLng = [lastPoint.lat, lastPoint.lng];
+            const path = userData.path; const lastPoint = path[path.length - 1]; const latLng = [lastPoint.lat, lastPoint.lng];
             const isCurrentUser = userId === currentUser.uid;
-            
-            const now = Date.now();
-            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < 2 * 60 * 1000 : false;
-            
+            const isOnline = userData.timestamp ? (Date.now() - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
             if (!mapObjects[userId]) mapObjects[userId] = { marker: null, polyline: null };
-            
             const userMapObject = mapObjects[userId];
-            const markerIcon = L.divIcon({
-                className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
-                html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
-                iconSize: isCurrentUser ? [28, 28] : [24, 24], iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
-            });
-
-            if (userMapObject.marker) {
-                userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
-            } else {
-                userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
-                if (isCurrentUser && path.length <= 2) map.setView(latLng, 15);
-            }
-            
-            userMapObject.marker.bindPopup(`<div class="font-sans"><strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}</div>`);
-
+            const markerIcon = L.divIcon({ className: isCurrentUser ? 'current-user-marker' : 'other-user-marker', html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`, iconSize: isCurrentUser ? [28, 28] : [24, 24], iconAnchor: isCurrentUser ? [14, 14] : [12, 12] });
+            if (userMapObject.marker) { userMapObject.marker.setLatLng(latLng).setIcon(markerIcon); } 
+            else { userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map); if (isCurrentUser && path.length <= 2) map.setView(latLng, 15); }
+            userMapObject.marker.bindPopup(`<div class="font-sans"><strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h ${isCurrentUser ? '<br><em class="text-gray-500">(Bạn)</em>' : ''}</div>`);
             const polylineOptions = { color: isOnline ? (isCurrentUser ? '#22c55e' : '#3b82f6') : '#9ca3af', weight: 4, opacity: isOnline ? 0.8 : 0.6, dashArray: isOnline ? null : '5, 10' };
-            
-            if (userMapObject.polyline) {
-                userMapObject.polyline.setLatLngs(path.map(p => [p.lat, p.lng])).setStyle(polylineOptions);
-            } else {
-                userMapObject.polyline = L.polyline(path.map(p => [p.lat, p.lng]), polylineOptions).addTo(map);
-            }
+            if (userMapObject.polyline) { userMapObject.polyline.setLatLngs(path.map(p => [p.lat, p.lng])).setStyle(polylineOptions); } 
+            else { userMapObject.polyline = L.polyline(path.map(p => [p.lat, p.lng]), polylineOptions).addTo(map); }
         }
         
         function removeUserFromMap(userId) {
@@ -403,50 +356,101 @@
             }
         }
         
+        // KHÔI PHỤC: Giao diện người dùng với nút xem lịch sử
         function updateUserListUI(users) {
             userList.innerHTML = '';
             users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
                 const li = document.createElement('li');
-                li.className = 'p-2 rounded-md hover:bg-gray-100 cursor-pointer';
-                li.onclick = () => window.panToUser(user.id);
+                li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
                 const statusText = `Hoạt động ${formatTimeAgo(user.timestamp)}`;
-                li.innerHTML = `<div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div><div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p><p class="text-xs text-gray-500">${statusText}</p></div></div>`;
+                li.innerHTML = `
+                    <div class="flex items-center justify-between cursor-pointer" onclick="window.panToUser('${user.id}')">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                            <div>
+                                <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                                <p class="text-xs text-gray-500">${statusText}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-right">
+                        <button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50">
+                            Xem đầy đủ
+                        </button>
+                    </div>`;
                 userList.appendChild(li);
             });
         }
         
-        window.panToUser = (userId) => {
-            if (mapObjects[userId]?.marker) {
-                map.setView(mapObjects[userId].marker.getLatLng(), 16);
-                mapObjects[userId].marker.openPopup();
+        // KHÔI PHỤC: Hàm tải lịch sử đầy đủ
+        window.loadAndDisplayFullPath = async (userId) => {
+            const button = document.getElementById(`load-history-${userId}`);
+            const originalText = button.textContent;
+            setButtonLoadingState(button, true, originalText, 'Đang tải...');
+            try {
+                const userDocRef = doc(db, `groups/${currentGroup.id}/locations`, userId);
+                const archiveQuery = query(collection(db, `groups/${currentGroup.id}/locations/${userId}/path_archives`), orderBy("createdAt", "asc"));
+                const [userDocSnap, archiveSnap] = await Promise.all([getDoc(userDocRef), getDocs(archiveQuery)]);
+                if (!userDocSnap.exists()) { showNotification("Không tìm thấy dữ liệu người dùng."); return; }
+                const userData = userDocSnap.data();
+                const fullPath = [...archiveSnap.docs.flatMap(d => d.data().segment || []), ...(userData.path || [])];
+                updateUserOnMap(userId, { ...userData, path: fullPath });
+                showNotification(`Đã tải toàn bộ lịch sử cho ${userData.name || '...'}.`);
+                button.textContent = 'Đã tải';
+                button.disabled = true;
+            } catch (error) {
+                console.error(`Lỗi tải lịch sử:`, error);
+                setButtonLoadingState(button, false, originalText);
             }
         };
+
+        window.panToUser = (userId) => { if (mapObjects[userId]?.marker) { map.setView(mapObjects[userId].marker.getLatLng(), 16); mapObjects[userId].marker.openPopup(); } };
         
+        // KHÔI PHỤC: Logic tính toán tốc độ và lưu trữ
+        function calculateAndSmoothSpeed(newPosition) {
+            if (!lastPosition) { lastPosition = newPosition; return 0; }
+            const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude).distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
+            const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
+            if (timeSeconds <= 0) { lastPosition = newPosition; return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0; }
+            const speedKmh = (distanceMeters / timeSeconds) * 3.6;
+            speedReadings.push(speedKmh);
+            if (speedReadings.length > SMOOTHING_FACTOR) speedReadings.shift();
+            lastPosition = newPosition; 
+            return speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
+        }
+
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser || !currentGroup) return;
             const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
-            await updateDoc(locationDocRef, {
-                timestamp: serverTimestamp(),
-                lastSpeed: speedKmh,
-                path: arrayUnion({ lat: latitude, lng: longitude })
-            }).catch(err => console.error("Lỗi cập nhật vị trí:", err));
+            const newPoint = { lat: latitude, lng: longitude };
+            try {
+                const docSnap = await getDoc(locationDocRef);
+                if (!docSnap.exists()) return;
+                const userData = docSnap.data();
+                const currentPath = userData.path || [];
+
+                if (currentPath.length >= PATH_ARCHIVE_THRESHOLD) {
+                    const newPath = [currentPath[currentPath.length - 1], newPoint];
+                    await addDoc(collection(db, `groups/${currentGroup.id}/locations/${currentUser.uid}/path_archives`), {
+                        segment: currentPath, createdAt: serverTimestamp()
+                    });
+                    await updateDoc(locationDocRef, { timestamp: serverTimestamp(), lastSpeed: speedKmh, path: newPath });
+                } else {
+                    await updateDoc(locationDocRef, { timestamp: serverTimestamp(), lastSpeed: speedKmh, path: arrayUnion(newPoint) });
+                }
+            } catch (error) { console.error("Lỗi cập nhật vị trí:", error); }
         }
         
         function startWatchingLocation() {
-            if (!navigator.geolocation) {
-                locationStatus.textContent = 'Trình duyệt không hỗ trợ'; return;
-            }
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    locationStatus.textContent = 'Đang hoạt động';
-                    const { latitude, longitude } = position.coords;
-                    const speedKmh = position.coords.speed ? position.coords.speed * 3.6 : 0;
-                    updateLocationInFirestore({ latitude, longitude, speedKmh });
-                },
-                (error) => { locationStatus.textContent = 'Lỗi vị trí.'; },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
+            if (!navigator.geolocation) { locationStatus.textContent = 'Trình duyệt không hỗ trợ'; return; }
+            navigator.geolocation.watchPosition( (position) => {
+                locationStatus.textContent = 'Đang hoạt động';
+                const { latitude, longitude } = position.coords;
+                const speedKmh = calculateAndSmoothSpeed(position);
+                speedDisplay.textContent = speedKmh.toFixed(1);
+                updateLocationInFirestore({ latitude, longitude, speedKmh });
+            }, (error) => { locationStatus.textContent = 'Lỗi vị trí.'; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } );
         }
 
         // --- Event Listeners ---
@@ -454,23 +458,16 @@
         joinGroupBtn.addEventListener('click', () => joinGroupModal.classList.remove('hidden'));
         cancelJoinBtn.addEventListener('click', () => joinGroupModal.classList.add('hidden'));
         confirmJoinBtn.addEventListener('click', () => joinGroup(groupCodeInput.value));
-        leaveGroupBtn.addEventListener('click', () => {
-             if (confirm("Bạn có chắc chắn muốn rời khỏi nhóm này không? Thao tác này không thể hoàn tác.")) leaveGroup();
-        });
+        leaveGroupBtn.addEventListener('click', () => { if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); });
         saveNameButton.addEventListener('click', async () => {
             const newName = deviceNameInput.value.trim();
             if (newName && currentUser && currentGroup) {
                 localStorage.setItem('deviceName', newName);
-                const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
-                await updateDoc(locationDocRef, { name: newName });
-                showNotification(`Tên đã được lưu thành "${newName}".`);
+                await updateDoc(doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid), { name: newName });
+                showNotification(`Tên đã lưu thành "${newName}".`);
             }
         });
-        copyCodeBtn.addEventListener('click', () => {
-             navigator.clipboard.writeText(groupCodeDisplay.textContent).then(() => {
-                 showNotification(`Đã sao chép mã: ${groupCodeDisplay.textContent}`);
-             });
-        });
+        copyCodeBtn.addEventListener('click', () => { navigator.clipboard.writeText(groupCodeDisplay.textContent).then(() => showNotification(`Đã sao chép mã: ${groupCodeDisplay.textContent}`)); });
         centerOnMeBtn.addEventListener('click', () => { if(currentUser?.uid && mapObjects[currentUser.uid]?.marker) map.setView(mapObjects[currentUser.uid].marker.getLatLng(), 16) });
         fitAllUsersBtn.addEventListener('click', () => {
             const markers = Object.values(mapObjects).map(obj => obj.marker).filter(Boolean);
@@ -483,40 +480,23 @@
                 const firebaseApp = initializeApp(firebaseConfig);
                 db = getFirestore(firebaseApp);
                 auth = getAuth(firebaseApp);
-
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
                         authStatus.textContent = 'Đã kết nối. Sẵn sàng!';
-
-                        // SỬA LỖI: Kích hoạt các nút sau khi đã xác thực
                         createGroupBtn.disabled = false;
                         joinGroupBtn.disabled = false;
-
                         const storedGroupId = localStorage.getItem('groupId');
-                        const storedGroupCode = localStorage.getItem('groupCode');
-                        
-                        if (storedGroupId && storedGroupCode) {
+                        if (storedGroupId) {
                             const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
                             if (groupDoc.exists()) {
-                                currentGroup = { id: storedGroupId, code: storedGroupCode };
+                                currentGroup = { id: storedGroupId, code: groupDoc.data().code };
                                 initializeAppForGroup();
-                            } else {
-                                localStorage.removeItem('groupId');
-                                localStorage.removeItem('groupCode');
-                            }
+                            } else { localStorage.removeItem('groupId'); localStorage.removeItem('groupCode'); }
                         }
-                    } else {
-                        signInAnonymously(auth).catch((error) => {
-                             authStatus.textContent = 'Lỗi xác thực.';
-                             console.error("Lỗi đăng nhập:", error);
-                        });
-                    }
+                    } else { signInAnonymously(auth).catch((err) => { console.error(err); authStatus.textContent = 'Lỗi xác thực.'; }); }
                 });
-            } catch (error) {
-                console.error("Lỗi khởi tạo Firebase:", error);
-                 authStatus.textContent = 'Lỗi khởi tạo ứng dụng.';
-            }
+            } catch (error) { console.error(error); authStatus.textContent = 'Lỗi khởi tạo ứng dụng.'; }
         }
         
         main();
