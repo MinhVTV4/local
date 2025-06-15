@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí Theo Nhóm - V4 (Room System)</title>
+    <title>Theo Dõi Vị Trí Thời Gian Thực - V2</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,69 +17,75 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        html, body { height: 100%; }
-        body { font-family: 'Inter', sans-serif; margin: 0; }
+        /* Custom styles to complement Tailwind */
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+        }
+        /* Custom icon for other users */
         .other-user-marker {
-            background-color: #3b82f6; width: 1.5rem; height: 1.5rem; border-radius: 9999px;
-            border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            display: flex; justify-content: center; align-items: center;
-            color: white; font-size: 0.75rem; font-weight: bold;
+            background-color: #3b82f6; /* bg-blue-500 */
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 9999px;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: bold;
         }
+        /* Custom icon for the current user */
         .current-user-marker {
-            background-color: #22c55e; width: 1.75rem; height: 1.75rem; border-radius: 9999px;
-            border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            background-color: #22c55e; /* bg-green-500 */
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 9999px;
+            border: 3px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        #map { height: 100%; width: 100%; border-radius: 0.75rem; }
+        /* Ensure Leaflet map renders correctly */
+        #map {
+            height: 100%;
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+        }
         .leaflet-pane { z-index: 1; }
         .leaflet-top, .leaflet-bottom { z-index: 2; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 antialiased">
 
-    <!-- Landing Screen: Shown on page load if no room ID is in URL -->
-    <div id="landing-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
-        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Theo Dõi Nhóm</h1>
-        <p class="text-lg text-gray-600 mb-10 max-w-2xl">
-            Tạo một phòng theo dõi riêng tư để chia sẻ vị trí với bạn bè hoặc tham gia một phòng đã có.
+    <!-- Authentication Screen: Shown on page load -->
+    <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Chào mừng bạn!</h1>
+        <p class="text-lg text-gray-600 mb-8 max-w-2xl">
+            Đây là một ứng dụng theo dõi vị trí thời gian thực. Nhấn nút bên dưới để bắt đầu ghi lại và chia sẻ hành trình của bạn.
         </p>
-        <div class="w-full max-w-md space-y-4">
-            <button id="create-room-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg">
-                Tạo Phòng Mới
-            </button>
-            <div class="relative flex items-center">
-                <hr class="w-full border-gray-300">
-                <span class="absolute left-1/2 -translate-x-1/2 bg-white px-2 text-sm text-gray-500">HOẶC</span>
-            </div>
-            <div class="space-y-2">
-                <input type="text" id="room-id-input" placeholder="Nhập ID phòng..." class="w-full text-center bg-white border border-gray-300 rounded-md px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="join-room-button" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-lg text-md transition">
-                    Tham Gia Phòng
-                </button>
-            </div>
-        </div>
-        <p id="landing-status" class="mt-6 text-gray-500 text-sm"></p>
+        <button id="start-tracking-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg">
+            Bắt đầu Ghi Hành Trình
+        </button>
+        <p id="auth-status" class="mt-4 text-gray-500 text-sm">Đang chờ xác thực...</p>
     </div>
 
-    <!-- Main Application Screen: Hidden until in a room and authenticated -->
+    <!-- Main Application Screen: Hidden until authenticated -->
     <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
+        <!-- Layout changed: Flex column on mobile (allowing scroll), grid on medium screens and up -->
         <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
 
             <!-- Left Panel: Controls & Info -->
             <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col md:overflow-y-auto">
                 <div>
-                    <h2 class="text-2xl font-bold mb-2 text-gray-900">Bảng điều khiển</h2>
-                    
-                    <!-- Room ID Display -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <h3 class="font-semibold text-sm mb-1 text-blue-800">ID Phòng (Chia sẻ cho bạn bè)</h3>
-                        <div class="flex items-center gap-2">
-                            <input id="room-id-display" class="font-mono text-blue-900 bg-transparent w-full" readonly>
-                            <button id="copy-room-id-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-3 py-1 rounded-md text-sm transition">Chép</button>
-                        </div>
-                    </div>
-
+                    <h2 class="text-2xl font-bold mb-1 text-gray-900">Bảng điều khiển</h2>
+                    <p class="text-xs text-gray-500 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
                     <p class="text-xs text-gray-500 mb-4 break-all">ID của bạn: <span id="user-id-display" class="font-mono"></span></p>
 
+                    <!-- Your Info -->
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                         <h3 class="font-semibold text-lg mb-2 text-gray-800">Thông tin của bạn</h3>
                         <div class="space-y-1 text-sm text-gray-700">
@@ -90,6 +96,7 @@
                         </div>
                     </div>
 
+                    <!-- Set Device Name -->
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                          <h3 class="font-semibold text-lg mb-2 text-gray-800">Tên hiển thị</h3>
                          <div class="flex gap-2">
@@ -99,10 +106,14 @@
                     </div>
                 </div>
 
+                <!-- Active Users List -->
                 <div class="flex flex-col min-h-0">
-                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên trong phòng</h3>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
                     <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
-                        <ul id="user-list" class="space-y-3"></ul>
+                        <ul id="user-list" class="space-y-3">
+                           <!-- JS will populate this list -->
+                           <li class="text-gray-500 text-sm">Đang chờ người dùng khác...</li>
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -114,6 +125,7 @@
         </div>
     </div>
     
+    <!-- Modal for notifications -->
     <div id="notification-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
             <p id="notification-message" class="text-lg mb-4 text-gray-800"></p>
@@ -121,37 +133,34 @@
         </div>
     </div>
 
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
+    <!-- Firebase JS SDK -->
     <script type="module">
+        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // --- Config ---
-        // THAY ĐỔI: Đã khôi phục lại cấu hình Firebase gốc của bạn
+        // --- Firebase Configuration ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
             authDomain: "ailocal-86167.firebaseapp.com",
             projectId: "ailocal-86167",
-            storageBucket: "ailocal-86167.appspot.com",
+            storageBucket: "ailocal-86167.firebasestorage.app",
             messagingSenderId: "303592611625",
             appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
         };
-        const PATH_ARCHIVE_THRESHOLD = 50;
-        const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- DOM Elements ---
-        const landingScreen = document.getElementById('landing-screen');
-        const createRoomButton = document.getElementById('create-room-button');
-        const roomIdInput = document.getElementById('room-id-input');
-        const joinRoomButton = document.getElementById('join-room-button');
-        const landingStatus = document.getElementById('landing-status');
-        
+        const authScreen = document.getElementById('auth-screen');
         const appScreen = document.getElementById('app-screen');
+        const startTrackingButton = document.getElementById('start-tracking-button');
+        const authStatus = document.getElementById('auth-status');
         const mapElement = document.getElementById('map');
-        const roomIdDisplay = document.getElementById('room-id-display');
-        const copyRoomIdButton = document.getElementById('copy-room-id-button');
+        const appIdDisplay = document.getElementById('app-id-display');
         const userIdDisplay = document.getElementById('user-id-display');
         const locationStatus = document.getElementById('location-status');
         const latDisplay = document.getElementById('lat-display');
@@ -164,26 +173,31 @@
         const notificationMessage = document.getElementById('notification-message');
         
         // --- Global State ---
-        let db, auth, firebaseApp;
+        let db, auth;
         let currentUser = null;
-        let currentRoomId = null; 
         let map = null;
-        let mapObjects = {};
+        let mapObjects = {}; // { userId: { marker, polyline } }
+        const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
+
         let lastPosition = null;
         const speedReadings = [];
-        let authStateUnsubscribe = null; 
+        const SMOOTHING_FACTOR = 5; 
+
+        // NEW: Constant for determining offline status
+        const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
-        const showNotification = (message) => {
+        function showNotification(message) {
             notificationMessage.textContent = message;
             notificationModal.classList.remove('hidden');
-        };
+        }
 
-        const generateRoomId = () => {
-            return Math.random().toString(36).substring(2, 8).toUpperCase();
-        };
-        
-        const formatTimeAgo = (timestamp) => {
+        /**
+         * NEW: Utility to format relative time for display.
+         * @param {Firebase.Timestamp} timestamp - The Firestore timestamp object.
+         * @returns {string} A human-readable time string (e.g., "vừa xong", "5 phút trước").
+         */
+        function formatTimeAgo(timestamp) {
             if (!timestamp) return 'không rõ';
             const now = new Date();
             const seconds = Math.floor((now - timestamp.toDate()) / 1000);
@@ -200,40 +214,24 @@
             interval = seconds / 60;
             if (interval > 1) return Math.floor(interval) + " phút trước";
             return 'vừa xong';
-        };
-
-        // --- Room & URL Handling ---
-        const handleCreateRoom = () => {
-            const newRoomId = generateRoomId();
-            landingStatus.textContent = `Đang tạo phòng ${newRoomId}...`;
-            window.location.href = `${window.location.pathname}?room=${newRoomId}`;
-        };
-
-        const handleJoinRoom = () => {
-            const roomId = roomIdInput.value.trim().toUpperCase();
-            if (roomId.length < 5) {
-                showNotification("ID phòng không hợp lệ. Vui lòng kiểm tra lại.");
-                return;
-            }
-            landingStatus.textContent = `Đang tham gia phòng ${roomId}...`;
-            window.location.href = `${window.location.pathname}?room=${roomId}`;
-        };
+        }
 
         // --- Core Application Logic ---
-        const initializeAppLogic = () => {
-            landingScreen.classList.add('hidden');
-            appScreen.classList.remove('hidden');
-            
-            roomIdDisplay.value = currentRoomId;
+
+        function initializeAppLogic() {
+            appIdDisplay.textContent = appId;
             userIdDisplay.textContent = currentUser.uid;
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
+            
+            authScreen.classList.add('hidden');
+            appScreen.classList.remove('hidden');
 
             initializeMap();
             startWatchingLocation();
             startListeningToOtherUsers();
-        };
+        }
 
-        const initializeMap = () => {
+        function initializeMap() {
             if (map) return;
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -241,36 +239,40 @@
                 maxZoom: 19
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
-        };
-        
-        const calculateAndSmoothSpeed = (newPosition) => {
-             if (!lastPosition) {
+        }
+
+        function calculateAndSmoothSpeed(newPosition) {
+            if (!lastPosition) {
                 lastPosition = newPosition;
                 return 0;
             }
+
             const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude)
                 .distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
+            
             const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
 
             if (timeSeconds <= 0) {
                  lastPosition = newPosition;
                  return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
             }
+
             const speedMs = distanceMeters / timeSeconds;
             const speedKmh = speedMs * 3.6;
 
             speedReadings.push(speedKmh);
-            if (speedReadings.length > 5) { // SMOOTHING_FACTOR
+            if (speedReadings.length > SMOOTHING_FACTOR) {
                 speedReadings.shift(); 
             }
+
             const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
             lastPosition = newPosition; 
             
             return smoothedSpeed;
-        };
+        }
 
-        const startWatchingLocation = () => {
-             if (!navigator.geolocation) {
+        function startWatchingLocation() {
+            if (!navigator.geolocation) {
                 locationStatus.textContent = 'Trình duyệt không hỗ trợ';
                 showNotification('Trình duyệt của bạn không hỗ trợ Geolocation.');
                 return;
@@ -279,8 +281,6 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     locationStatus.textContent = 'Đang hoạt động';
-                    locationStatus.classList.remove('text-yellow-600');
-                    locationStatus.classList.add('text-green-600');
                     const { latitude, longitude } = position.coords;
                     const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
 
@@ -295,65 +295,58 @@
                     if (error.code === error.PERMISSION_DENIED) message = 'Bạn đã từ chối quyền vị trí.';
                     else if (error.code === error.POSITION_UNAVAILABLE) message = 'Vị trí không khả dụng.';
                     locationStatus.textContent = message;
-                    locationStatus.classList.add('text-yellow-600');
-                    locationStatus.classList.remove('text-green-600');
                     showNotification(message);
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
-        };
-
-        const updateLocationInFirestore = async ({ latitude, longitude, speedKmh }) => {
-            if (!db || !currentUser || !currentRoomId) return;
-
-            const usersCollectionPath = `artifacts/public/data/rooms/${currentRoomId}/users`;
-            const userDocRef = doc(db, usersCollectionPath, currentUser.uid);
+        }
+        
+        async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
+            if (!db || !currentUser) return;
+            
+            const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
             const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                const docSnap = await getDoc(userDocRef);
-                if (!docSnap.exists()) return;
-                
-                const currentPath = docSnap.data().path || [];
-
-                if (currentPath.length >= PATH_ARCHIVE_THRESHOLD) {
-                    const newPath = [currentPath[currentPath.length - 1], newPoint];
-                    const archiveCollectionRef = collection(db, usersCollectionPath, currentUser.uid, 'path_archives');
-                    await addDoc(archiveCollectionRef, { segment: currentPath, createdAt: serverTimestamp() });
-                    await updateDoc(userDocRef, {
-                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
-                        timestamp: serverTimestamp(),
-                        lastSpeed: speedKmh,
-                        path: newPath
-                    });
-                } else {
-                    await updateDoc(userDocRef, {
-                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
-                        timestamp: serverTimestamp(),
-                        lastSpeed: speedKmh,
-                        path: arrayUnion(newPoint)
-                    });
-                }
+                await updateDoc(userDocRef, {
+                    name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
+                    timestamp: serverTimestamp(),
+                    lastSpeed: speedKmh, 
+                    path: arrayUnion(newPoint)
+                });
             } catch (error) {
-                console.error("Lỗi khi cập nhật vị trí (pruning):", error);
+                console.error("Error updating document:", error);
+                showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
-        };
+        }
+        
+        function startListeningToOtherUsers() {
+            const usersCollection = collection(db, FIRESTORE_COLLECTION);
 
-        const startListeningToOtherUsers = () => {
-            if (!db || !currentRoomId) return;
-            const usersCollection = collection(db, `artifacts/public/data/rooms/${currentRoomId}/users`);
             onSnapshot(usersCollection, (snapshot) => {
-                const activeUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 const activeUserIds = new Set(activeUsers.map(u => u.id));
+
                 activeUsers.forEach(user => updateUserOnMap(user.id, user));
+
                 Object.keys(mapObjects).forEach(userId => {
-                    if (!activeUserIds.has(userId)) removeUserFromMap(userId);
+                    if (!activeUserIds.has(userId)) {
+                        removeUserFromMap(userId);
+                    }
                 });
                 updateUserListUI(activeUsers);
-            }, (error) => console.error("Lỗi snapshot:", error));
-        };
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}.`);
+            });
+        }
         
-        const updateUserOnMap = (userId, userData) => {
+        /**
+         * UPDATED: Creates or updates a user's marker and polyline with online/offline styling.
+         * @param {string} userId - The ID of the user.
+         * @param {object} userData - The user's data from Firestore.
+         */
+        function updateUserOnMap(userId, userData) {
             if (!map || !userData.path || userData.path.length === 0) return;
 
             const path = userData.path;
@@ -370,6 +363,7 @@
             
             const userMapObject = mapObjects[userId];
 
+            // --- Marker Logic ---
             const markerIcon = L.divIcon({
                 className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
                 html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
@@ -381,7 +375,7 @@
                 userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
             } else {
                 userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
-                if (isCurrentUser && path.length <= 2) { 
+                if (isCurrentUser && path.length === 1) {
                     map.setView(latLng, 15);
                 }
             }
@@ -394,9 +388,10 @@
                 </div>`;
             userMapObject.marker.bindPopup(popupContent);
 
+            // --- Polyline Logic (with online/offline styles) ---
             const polylinePoints = path.map(p => [p.lat, p.lng]);
             const onlineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
-            const offlineColor = '#9ca3af';
+            const offlineColor = '#9ca3af'; // gray-400
 
             const polylineOptions = { 
                 color: isOnline ? onlineColor : offlineColor,
@@ -411,21 +406,26 @@
             } else {
                 userMapObject.polyline = L.polyline(polylinePoints, polylineOptions).addTo(map);
             }
-        };
-
-        const removeUserFromMap = (userId) => {
+        }
+        
+        function removeUserFromMap(userId) {
             if (mapObjects[userId]) {
                 const { marker, polyline } = mapObjects[userId];
                 if (marker) map.removeLayer(marker);
                 if (polyline) map.removeLayer(polyline);
                 delete mapObjects[userId];
             }
-        };
+        }
 
-        const updateUserListUI = (users) => {
+        /**
+         * UPDATED: Updates the list of users with online/offline status indicators.
+         * @param {Array} users - An array of active user objects.
+         */
+        function updateUserListUI(users) {
             userList.innerHTML = '';
             const now = Date.now();
 
+            // Sort users: current user first, then by online status, then by name
             const sortedUsers = users.sort((a, b) => {
                 if (a.id === currentUser.uid) return -1;
                 if (b.id === currentUser.uid) return 1;
@@ -433,14 +433,14 @@
                 const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
                 const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
 
-                if (aIsOnline && !bIsOnline) return -1;
+                if (aIsOnline && !bIsOnline) return -1; // Online users first
                 if (!aIsOnline && bIsOnline) return 1;
                 
-                return (a.name || '').localeCompare(b.name || '');
+                return (a.name || '').localeCompare(b.name || ''); // Then sort by name
             });
             
-            if (sortedUsers.length === 0) {
-                 userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có ai trong phòng.</li>';
+            if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
+                userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có người dùng nào khác.</li>';
                 return;
             }
 
@@ -476,82 +476,79 @@
                 `;
                 userList.appendChild(li);
             });
-        };
+        }
+        
+        // --- Event Listeners ---
+        startTrackingButton.addEventListener('click', () => {
+            authStatus.textContent = 'Đang kết nối...';
+            startTrackingButton.disabled = true;
+            signInAnonymously(auth).catch((error) => {
+                console.error("Anonymous sign-in failed: ", error);
+                authStatus.textContent = 'Xác thực thất bại. Vui lòng thử lại.';
+                showNotification(`Lỗi xác thực: ${error.message}`);
+                startTrackingButton.disabled = false;
+            });
+        });
 
-        const main = () => {
-            firebaseApp = initializeApp(firebaseConfig);
-            db = getFirestore(firebaseApp);
-            auth = getAuth(firebaseApp);
+        saveNameButton.addEventListener('click', () => {
+            const newName = deviceNameInput.value.trim();
+            if (newName) {
+                localStorage.setItem('deviceName', newName);
+                const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
+                updateDoc(userDocRef, { name: newName });
+                showNotification(`Tên đã được lưu thành "${newName}".`);
+            } else {
+                 showNotification('Vui lòng nhập tên hợp lệ.');
+            }
+        });
 
-            const urlParams = new URLSearchParams(window.location.search);
-            currentRoomId = urlParams.get('room');
+        // --- Initialization ---
+        function main() {
+            try {
+                const firebaseApp = initializeApp(firebaseConfig);
+                db = getFirestore(firebaseApp);
+                auth = getAuth(firebaseApp);
 
-            if (currentRoomId) {
-                landingScreen.classList.add('hidden');
-                document.title = `Phòng: ${currentRoomId}`;
-
-                authStateUnsubscribe = onAuthStateChanged(auth, async (user) => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
-
-                        const userDocRef = doc(db, `artifacts/public/data/rooms/${currentRoomId}/users`, currentUser.uid);
+                        
+                        const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
                         const docSnap = await getDoc(userDocRef);
                         if (!docSnap.exists()) {
-                            await setDoc(userDocRef, {
-                                name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
-                                timestamp: serverTimestamp(),
-                                path: []
-                            });
+                            try {
+                                await setDoc(userDocRef, {
+                                    name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
+                                    timestamp: serverTimestamp(),
+                                    path: [] 
+                                });
+                            } catch (error) {
+                                console.error("Error creating user document:", error);
+                                showNotification("Không thể tạo hồ sơ người dùng.");
+                                return;
+                            }
                         }
-                        
+
+                        authStatus.textContent = 'Xác thực thành công!';
                         if(!appScreen.classList.contains('hidden')) return;
                         initializeAppLogic();
-
                     } else {
-                        signInAnonymously(auth).catch((error) => {
-                            console.error("Lỗi đăng nhập ẩn danh:", error);
-                            showNotification(`Không thể tham gia phòng: ${error.message}`);
-                        });
+                        currentUser = null;
+                        authScreen.classList.remove('hidden');
+                        appScreen.classList.add('hidden');
+                        authStatus.textContent = 'Sẵn sàng để bắt đầu.';
+                        startTrackingButton.disabled = false;
                     }
                 });
-
-            } else {
-                landingScreen.classList.remove('hidden');
-                appScreen.classList.add('hidden');
-                
-                createRoomButton.addEventListener('click', handleCreateRoom);
-                joinRoomButton.addEventListener('click', handleJoinRoom);
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                authStatus.textContent = "Lỗi khởi tạo. Kiểm tra console.";
+                showNotification(`Không thể khởi tạo ứng dụng: ${error.message}`);
             }
-
-            saveNameButton.addEventListener('click', () => {
-                const newName = deviceNameInput.value.trim();
-                if (newName) {
-                    localStorage.setItem('deviceName', newName);
-                    const userDocRef = doc(db, `artifacts/public/data/rooms/${currentRoomId}/users`, currentUser.uid);
-                    updateDoc(userDocRef, { name: newName });
-                    showNotification(`Tên đã được lưu thành "${newName}".`);
-                }
-            });
-
-            copyRoomIdButton.addEventListener('click', () => {
-                const textArea = document.createElement("textarea");
-                textArea.value = currentRoomId;
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    showNotification(`Đã chép ID Phòng: ${currentRoomId}`);
-                } catch (err) {
-                    showNotification('Lỗi khi chép ID.');
-                }
-                document.body.removeChild(textArea);
-            });
-        };
-
-        // Run the app
+        }
+        
         main();
-
+        
     </script>
 </body>
 </html>
