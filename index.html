@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.6 - Hoàn Chỉnh</title>
+    <title>Theo Dõi Vị Trí v5.5 - Cải tiến Danh sách Thành viên</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,6 +14,7 @@
 
     <!-- Leaflet MarkerCluster CSS and JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <!-- Google Fonts: Inter -->
@@ -456,11 +457,23 @@
         
         function updateUserListPreview(users) {
             userListPreview.innerHTML = '';
-            const sortedUsers = sortUsers(users);
-            const previewUsers = sortedUsers.slice(0, 4);
+            const previewUsers = users.slice(0, 4);
 
             previewUsers.forEach(user => {
-                const li = createUserListItem(user, 'preview');
+                const isCurrentUser = user.id === currentUser.uid;
+                const isOnline = user.timestamp ? (Date.now() - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                
+                const li = document.createElement('li');
+                li.className = 'flex items-center gap-3 cursor-pointer p-1 rounded-md hover:bg-gray-100';
+                li.onclick = () => window.panToUser(user.id, true);
+                li.innerHTML = `
+                    <div class="relative">
+                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-sm">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                        <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ${statusDotColor} border-2 border-white"></span>
+                    </div>
+                    <p class="font-medium text-gray-800 text-sm truncate">${user.name || 'Người dùng ẩn danh'}</p>
+                `;
                 userListPreview.appendChild(li);
             });
 
@@ -471,90 +484,59 @@
                 userListPreview.appendChild(li);
             }
         }
-
-        function sortUsers(users) {
-             return users.sort((a, b) => {
-                if (a.id === currentGroup.ownerId) return -1;
-                if (b.id === currentGroup.ownerId) return 1;
-                if (a.id === currentUser.uid) return -1;
-                if (b.id === currentUser.uid) return 1;
-                return (a.name || '').localeCompare(b.name || '');
-            });
-        }
-        
-        function createUserListItem(user, context = 'modal') {
-            const isCurrentUser = user.id === currentUser.uid;
-            const isOnline = user.timestamp ? (Date.now() - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
-            const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
-            const ownerIcon = user.id === currentGroup.ownerId ? '👑' : '';
-            
-            const li = document.createElement('li');
-
-            if (context === 'preview') {
-                li.className = 'flex items-center gap-3 cursor-pointer p-1 rounded-md hover:bg-gray-100';
-                li.onclick = () => window.panToUser(user.id, true);
-                li.innerHTML = `
-                    <div class="relative">
-                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-sm">${(user.name || 'A').charAt(0).toUpperCase()}</div>
-                        <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ${statusDotColor} border-2 border-white"></span>
-                    </div>
-                    <p class="font-medium text-gray-800 text-sm truncate">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>
-                `;
-                return li;
-            }
-
-            // Modal logic
-            let removeButton = '';
-            if (currentUser.uid === currentGroup.ownerId && !isCurrentUser) {
-                removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>`;
-            }
-
-            if (currentViewMode === 'grid') {
-                li.className = 'p-2 rounded-md hover:bg-gray-100 cursor-pointer text-center';
-                li.innerHTML = `<div class="relative inline-block" onclick="window.panToUser('${user.id}')">
-                                    <div class="w-16 h-16 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-2xl">${(user.name || 'A').charAt(0).toUpperCase()}</div>
-                                    <span class="absolute bottom-0 right-0 block h-4 w-4 rounded-full ${statusDotColor} border-2 border-white"></span>
-                                </div>
-                                <p class="font-semibold text-gray-800 text-sm mt-2 truncate">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>`;
-            } else {
-                 li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
-                 li.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
-                           <div class="relative">
-                               <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
-                               <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
-                           </div>
-                            <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${formatTimeAgo(user.timestamp)}</p></div>
-                        </div>
-                        ${removeButton}
-                    </div>`;
-            }
-            return li;
-        }
         
         function updateUserListUI(users) {
             memberCountSpan.textContent = users.length;
             modalUserList.innerHTML = '';
+            const isOwner = currentUser.uid === currentGroup.ownerId;
             const searchTerm = modalSearchUserInput.value.toLowerCase();
             const activeFilter = modalStatusFilterButtons.querySelector('.bg-blue-500').dataset.status;
 
-            const sortedUsers = sortUsers(users);
-            sortedUsers.forEach(user => {
+            users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
+                const isCurrentUser = user.id === currentUser.uid;
                 const isOnline = user.timestamp ? (Date.now() - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
                 const matchesSearch = (user.name || 'Người dùng ẩn danh').toLowerCase().includes(searchTerm);
                 const matchesStatus = (activeFilter === 'all') || (activeFilter === 'online' && isOnline) || (activeFilter === 'offline' && !isOnline);
                 if (!matchesSearch || !matchesStatus) return;
+
+                const li = document.createElement('li');
                 
-                const li = createUserListItem(user, 'modal');
+                const ownerIcon = user.id === currentGroup.ownerId ? '👑' : '';
+                let removeButton = '';
+                if(isOwner && !isCurrentUser) {
+                    removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>`;
+                }
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                
+                if (currentViewMode === 'grid') {
+                    li.className = 'p-2 rounded-md hover:bg-gray-100 cursor-pointer text-center';
+                    li.innerHTML = `<div class="relative inline-block" onclick="window.panToUser('${user.id}')">
+                                        <div class="w-16 h-16 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-2xl">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                                        <span class="absolute bottom-0 right-0 block h-4 w-4 rounded-full ${statusDotColor} border-2 border-white"></span>
+                                    </div>
+                                    <p class="font-semibold text-gray-800 text-sm mt-2 truncate">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>`;
+                } else {
+                     li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
+                     li.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
+                               <div class="relative">
+                                   <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                                   <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                               </div>
+                                <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${formatTimeAgo(user.timestamp)}</p></div>
+                            </div>
+                            ${removeButton}
+                        </div>`;
+                }
                 modalUserList.appendChild(li);
             });
         }
         
         window.loadAndDisplayFullPath = async (userId) => {
             const button = document.getElementById(`load-history-${userId}`);
-            const originalText = button?.textContent;
-            if (button) setButtonLoadingState(button, true, originalText, 'Đang tải...');
+            const originalText = button.textContent;
+            setButtonLoadingState(button, true, originalText, 'Đang tải...');
             try {
                 const archiveQuery = query(collection(db, `groups/${currentGroup.id}/locations/${userId}/path_archives`), orderBy("createdAt", "asc"));
                 const [userDocSnap, archiveSnap] = await Promise.all([getDoc(doc(db, `groups/${currentGroup.id}/locations`, userId)), getDocs(archiveQuery)]);
@@ -562,8 +544,9 @@
                 const userData = userDocSnap.data();
                 const fullPath = [...archiveSnap.docs.flatMap(d => d.data().segment || []), ...(userData.path || [])];
                 updateUserOnMap(userId, { ...userData, path: fullPath });
-                if (button) { button.textContent = 'Đã tải'; button.disabled = true; }
-            } catch (error) { console.error(`Lỗi tải lịch sử:`, error); if (button) setButtonLoadingState(button, false, originalText); }
+                button.textContent = 'Đã tải';
+                button.disabled = true;
+            } catch (error) { console.error(`Lỗi tải lịch sử:`, error); setButtonLoadingState(button, false, originalText); }
         };
 
         window.panToUser = (userId, fromPreview = false) => { 
@@ -669,8 +652,8 @@
                 currentViewMode = view;
                 viewToggleButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-blue-500', 'text-white'));
                 e.target.closest('button').classList.add('bg-blue-500', 'text-white');
-                if (view === 'grid') modalUserList.classList.add('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'lg:grid-cols-6', 'gap-4');
-                else modalUserList.classList.remove('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'lg:grid-cols-6', 'gap-4');
+                if (view === 'grid') modalUserList.classList.add('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'gap-4');
+                else modalUserList.classList.remove('grid', 'grid-cols-3', 'sm:grid-cols-4', 'md:grid-cols-5', 'gap-4');
                 updateUserListUI(allUsersData);
             }
         });
@@ -718,4 +701,6 @@
         main();
     </script>
 </body>
-</ht
+</html>
+" and the query is "bỏ đi dòng code này     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+". Please answer my que
