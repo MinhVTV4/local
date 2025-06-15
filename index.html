@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí Thời Gian Thực - Bản Ổn Định</title>
+    <title>Theo Dõi Vị Trí v4.1 - Hệ thống Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,85 +17,73 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        /* Custom styles to complement Tailwind */
-        html, body {
-            height: 100%;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-        }
-        /* Custom icon for other users */
+        html, body { height: 100%; }
+        body { font-family: 'Inter', sans-serif; margin: 0; }
         .other-user-marker {
-            background-color: #3b82f6; /* bg-blue-500 */
-            width: 1.5rem;
-            height: 1.5rem;
-            border-radius: 9999px;
-            border: 2px solid white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-size: 0.75rem;
-            font-weight: bold;
+            background-color: #3b82f6; width: 1.5rem; height: 1.5rem; border-radius: 9999px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex; justify-content: center; align-items: center; color: white; font-size: 0.75rem; font-weight: bold;
         }
-        /* Custom icon for the current user */
         .current-user-marker {
-            background-color: #22c55e; /* bg-green-500 */
-            width: 1.75rem;
-            height: 1.75rem;
-            border-radius: 9999px;
-            border: 3px solid white;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            background-color: #22c55e; width: 1.75rem; height: 1.75rem; border-radius: 9999px; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        /* Container for the map to position controls */
-        #map-container {
-            position: relative;
-            height: 100%;
-            width: 100%;
-        }
-        #map {
-            height: 100%;
-            width: 100%;
-            border-radius: 0.75rem; /* rounded-xl */
-        }
-        /* Ensure Leaflet controls are on top */
+        #map-container { position: relative; height: 100%; width: 100%; }
+        #map { height: 100%; width: 100%; border-radius: 0.75rem; }
         .leaflet-pane { z-index: 1; }
         .leaflet-top, .leaflet-bottom { z-index: 2; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 antialiased">
 
-    <!-- Authentication Screen -->
+    <!-- Auth/Welcome Screen -->
     <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
-        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Chào mừng bạn!</h1>
-        <p class="text-lg text-gray-600 mb-8 max-w-2xl">
-            Đây là một ứng dụng theo dõi vị trí thời gian thực. Nhấn nút bên dưới để bắt đầu ghi lại và chia sẻ hành trình của bạn.
-        </p>
-        <button id="start-tracking-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg">
-            Bắt đầu Ghi Hành Trình
-        </button>
-        <p id="auth-status" class="mt-4 text-gray-500 text-sm">Đang chờ xác thực...</p>
+        <div class="max-w-md w-full">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Theo Dõi Nhóm</h1>
+            <p class="text-lg text-gray-600 mb-8">Tạo một nhóm riêng tư để chia sẻ vị trí với gia đình và bạn bè.</p>
+            <div class="space-y-4">
+                <!-- SỬA LỖI: Vô hiệu hóa các nút cho đến khi xác thực xong -->
+                <button id="create-group-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg disabled:bg-blue-400 disabled:cursor-not-allowed" disabled>Tạo Nhóm Mới</button>
+                <button id="join-group-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-gray-300 disabled:cursor-not-allowed" disabled>Tham Gia Nhóm</button>
+            </div>
+            <p id="auth-status" class="mt-6 text-gray-500 text-sm">Đang kết nối...</p>
+        </div>
+    </div>
+    
+    <!-- Join Group Modal -->
+    <div id="join-group-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-4">Tham Gia Nhóm</h2>
+            <p class="text-gray-600 mb-4">Nhập mã mời bạn nhận được từ bạn bè.</p>
+            <input type="text" id="group-code-input" placeholder="VD: NHOM-1234" class="w-full text-center uppercase font-mono bg-gray-100 border border-gray-300 rounded-md px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div class="mt-6 flex gap-4">
+                <button id="cancel-join-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold px-6 py-2 rounded-md">Hủy</button>
+                <button id="confirm-join-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Xác nhận</button>
+            </div>
+        </div>
     </div>
 
     <!-- Main Application Screen -->
     <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
-        <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
+         <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
 
-            <!-- Left Panel: Controls & Info -->
+            <!-- Left Panel -->
             <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col md:overflow-y-auto">
                 <div>
-                    <h2 class="text-2xl font-bold mb-1 text-gray-900">Bảng điều khiển</h2>
-                    <p class="text-xs text-gray-500 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
-                    <p class="text-xs text-gray-500 mb-4 break-all">ID của bạn: <span id="user-id-display" class="font-mono"></span></p>
+                    <h2 class="text-2xl font-bold mb-2 text-gray-900">Bảng điều khiển</h2>
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg mb-4">
+                        <p class="text-sm text-blue-800">Mã mời của nhóm:</p>
+                        <div class="flex items-center gap-2">
+                           <span id="group-code-display" class="font-mono text-xl font-bold text-blue-900"></span>
+                           <button id="copy-code-btn" title="Sao chép mã" class="text-blue-600 hover:text-blue-800">
+                               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                           </button>
+                        </div>
+                    </div>
 
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                         <h3 class="font-semibold text-lg mb-2 text-gray-800">Thông tin của bạn</h3>
+                        <p class="text-xs text-gray-500 mb-2 break-all">ID: <span id="user-id-display" class="font-mono"></span></p>
                         <div class="space-y-1 text-sm text-gray-700">
                             <p>Trạng thái: <span id="location-status" class="font-medium text-yellow-600">Đang lấy vị trí...</span></p>
-                            <p>Vĩ độ: <span id="lat-display" class="font-mono text-green-600">N/A</span></p>
-                            <p>Kinh độ: <span id="lng-display" class="font-mono text-green-600">N/A</span></p>
                             <p>Tốc độ: <span id="speed-display" class="font-mono text-green-600">0</span> km/h</p>
                         </div>
                     </div>
@@ -107,84 +95,67 @@
                             <button id="save-name-button" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 rounded-md text-sm transition">Lưu</button>
                          </div>
                     </div>
+                     <button id="leave-group-btn" class="w-full mt-2 bg-red-100 text-red-700 hover:bg-red-200 font-bold py-2 px-4 rounded-lg text-sm transition">Rời Nhóm</button>
                 </div>
 
-                <div class="flex flex-col min-h-0">
-                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
-                    <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
-                        <ul id="user-list" class="space-y-3">
-                           <li class="text-gray-500 text-sm">Đang chờ người dùng khác...</li>
-                        </ul>
+                <div class="flex flex-col min-h-0 mt-4">
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên nhóm</h3>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[200px]">
+                        <ul id="user-list" class="space-y-3"></ul>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Panel: Map -->
+            <!-- Right Panel -->
             <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 h-[65vh] md:h-auto">
                 <div id="map-container">
                     <div id="map"></div>
-                    <!-- Map control buttons -->
                     <div class="absolute top-2 right-2 z-[999] flex flex-col gap-2">
-                        <button id="center-on-me-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Về vị trí của tôi">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" /><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V12a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V6Z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <button id="fit-all-users-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Xem tất cả">
-                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M18.375 2.25a.75.75 0 0 0-1.125.41L15.75 6H12.75a.75.75 0 0 0 0 1.5h3.438L15 9.688a.75.75 0 0 0 1.125.41l3.375-3.375a.75.75 0 0 0 0-1.06L19.5 5.625l-1.937-1.938a.75.75 0 0 0-.188-.437ZM19.5 6.438l.938.937-2.25 2.25a.75.75 0 0 0 0 1.06l.938.938-1.5 1.5a.75.75 0 0 0-1.06 0l-3.75 3.75a.75.75 0 0 0 0 1.06l1.5 1.5-.937.937a.75.75 0 0 0-1.06 0l-3.375-3.375a.75.75 0 0 0-1.06 0L4.5 18.375a.75.75 0 0 0 .41 1.125l3.375 1.125a.75.75 0 0 0 .6-.094l1.625-1.083a.75.75 0 0 0 .281-.53v-3.438l1.5-1.5a.75.75 0 0 0 1.06 0l3-3a.75.75 0 0 0 0-1.06l-1.5-1.5.938-.937a.75.75 0 0 0 0-1.06L19.5 6.438Z" /></svg>
-                        </button>
-                        <button id="wake-lock-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center hidden" title="Giữ màn hình luôn sáng">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                                <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.106a.75.75 0 0 1 0 1.06l-1.591 1.59a.75.75 0 1 1-1.06-1.06l1.59-1.591a.75.75 0 0 1 1.06 0ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 1-1.06 0l-1.59-1.591a.75.75 0 1 1 1.06-1.06l1.59 1.591a.75.75 0 0 1 0 1.06ZM12 18.75a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0v-2.25a.75.75 0 0 1 .75-.75ZM5.106 17.834a.75.75 0 0 1 0-1.06l1.591-1.59a.75.75 0 1 1 1.06 1.06l-1.591 1.59a.75.75 0 0 1-1.06 0ZM4.5 12a.75.75 0 0 1-.75-.75V9a.75.75 0 0 1 1.5 0v2.25A.75.75 0 0 1 4.5 12ZM6.106 5.106a.75.75 0 0 1 1.06 0l1.591 1.59a.75.75 0 0 1-1.06 1.06l-1.59-1.591a.75.75 0 0 1 0-1.06Z" />
-                            </svg>
-                        </button>
+                         <button id="center-on-me-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Về vị trí của tôi"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" /><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V12a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V6Z" clip-rule="evenodd" /></svg></button>
+                         <button id="fit-all-users-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Xem tất cả"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M18.375 2.25a.75.75 0 0 0-1.125.41L15.75 6H12.75a.75.75 0 0 0 0 1.5h3.438L15 9.688a.75.75 0 0 0 1.125.41l3.375-3.375a.75.75 0 0 0 0-1.06L19.5 5.625l-1.937-1.938a.75.75 0 0 0-.188-.437ZM19.5 6.438l.938.937-2.25 2.25a.75.75 0 0 0 0 1.06l.938.938-1.5 1.5a.75.75 0 0 0-1.06 0l-3.75 3.75a.75.75 0 0 0 0 1.06l1.5 1.5-.937.937a.75.75 0 0 0-1.06 0l-3.375-3.375a.75.75 0 0 0-1.06 0L4.5 18.375a.75.75 0 0 0 .41 1.125l3.375 1.125a.75.75 0 0 0 .6-.094l1.625-1.083a.75.75 0 0 0 .281-.53v-3.438l1.5-1.5a.75.75 0 0 0 1.06 0l3-3a.75.75 0 0 0 0-1.06l-1.5-1.5.938-.937a.75.75 0 0 0 0-1.06L19.5 6.438Z" /></svg></button>
+                         <button id="wake-lock-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center hidden" title="Giữ màn hình luôn sáng"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.106a.75.75 0 0 1 0 1.06l-1.591 1.59a.75.75 0 1 1-1.06-1.06l1.59-1.591a.75.75 0 0 1 1.06 0ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 1-1.06 0l-1.59-1.591a.75.75 0 1 1 1.06-1.06l1.59 1.591a.75.75 0 0 1 0 1.06ZM12 18.75a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0v-2.25a.75.75 0 0 1 .75-.75ZM5.106 17.834a.75.75 0 0 1 0-1.06l1.591-1.59a.75.75 0 1 1 1.06 1.06l-1.591 1.59a.75.75 0 0 1-1.06 0ZM4.5 12a.75.75 0 0 1-.75-.75V9a.75.75 0 0 1 1.5 0v2.25A.75.75 0 0 1 4.5 12ZM6.106 5.106a.75.75 0 0 1 1.06 0l1.591 1.59a.75.75 0 0 1-1.06 1.06l-1.59-1.591a.75.75 0 0 1 0-1.06Z" /></svg></button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Notification Modal -->
-    <div id="notification-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
-            <p id="notification-message" class="text-lg mb-4 text-gray-800"></p>
-            <button onclick="document.getElementById('notification-modal').classList.add('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Đã hiểu</button>
-        </div>
-    </div>
+    <div id="notification-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center"><p id="notification-message" class="text-lg mb-4 text-gray-800"></p><button onclick="document.getElementById('notification-modal').classList.add('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Đã hiểu</button></div></div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    
-    <!-- Firebase JS SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // --- Firebase Configuration ---
-        // SỬA LỖI: Sử dụng một appId cố định để dữ liệu được nhất quán
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'realtime-location-tracker-shared-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
-            authDomain: "ailocal-86167.firebaseapp.com",
-            projectId: "ailocal-86167",
-            storageBucket: "ailocal-86167.appspot.com",
-            messagingSenderId: "303592611625",
-            appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
+        const firebaseConfig = {
+             apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
+             authDomain: "ailocal-86167.firebaseapp.com",
+             projectId: "ailocal-86167",
+             storageBucket: "ailocal-86167.appspot.com",
+             messagingSenderId: "303592611625",
+             appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
         };
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
         const appScreen = document.getElementById('app-screen');
-        const startTrackingButton = document.getElementById('start-tracking-button');
         const authStatus = document.getElementById('auth-status');
+        const createGroupBtn = document.getElementById('create-group-btn');
+        const joinGroupBtn = document.getElementById('join-group-btn');
+        const joinGroupModal = document.getElementById('join-group-modal');
+        const groupCodeInput = document.getElementById('group-code-input');
+        const cancelJoinBtn = document.getElementById('cancel-join-btn');
+        const confirmJoinBtn = document.getElementById('confirm-join-btn');
         const mapElement = document.getElementById('map');
-        const appIdDisplay = document.getElementById('app-id-display');
+        const groupCodeDisplay = document.getElementById('group-code-display');
+        const copyCodeBtn = document.getElementById('copy-code-btn');
         const userIdDisplay = document.getElementById('user-id-display');
         const locationStatus = document.getElementById('location-status');
-        const latDisplay = document.getElementById('lat-display');
-        const lngDisplay = document.getElementById('lng-display');
         const speedDisplay = document.getElementById('speed-display');
         const deviceNameInput = document.getElementById('device-name-input');
         const saveNameButton = document.getElementById('save-name-button');
+        const leaveGroupBtn = document.getElementById('leave-group-btn');
         const userList = document.getElementById('user-list');
         const notificationModal = document.getElementById('notification-modal');
         const notificationMessage = document.getElementById('notification-message');
@@ -195,22 +166,20 @@
         // --- Global State ---
         let db, auth;
         let currentUser = null;
+        let currentGroup = null; // {id, code}
         let map = null;
         let mapObjects = {};
-        const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
         let lastPosition = null;
         const speedReadings = [];
-        const SMOOTHING_FACTOR = 5; 
-        const PATH_ARCHIVE_THRESHOLD = 50;
-        const OFFLINE_THRESHOLD_MINUTES = 2;
         let wakeLock = null;
+        let locationsUnsubscribe = null; // To stop listening to old group
 
         // --- Utility Functions ---
         function showNotification(message) {
             notificationMessage.textContent = message;
             notificationModal.classList.remove('hidden');
         }
-
+        
         function formatTimeAgo(timestamp) {
             if (!timestamp) return 'không rõ';
             const now = new Date();
@@ -224,200 +193,168 @@
             return `${Math.floor(interval)} ngày trước`;
         }
 
-        // --- Core Application Logic ---
-
-        function initializeAppLogic() {
-            appIdDisplay.textContent = appId;
-            userIdDisplay.textContent = currentUser.uid;
-            deviceNameInput.value = localStorage.getItem('deviceName') || '';
+        function setLoadingState(isLoading, button, message = 'Đang xử lý...') {
+            if (isLoading) {
+                button.disabled = true;
+                const originalText = button.textContent;
+                button.textContent = message;
+                return originalText;
+            }
+        }
+        
+        // --- UI Transitions ---
+        function showAppScreen() {
             authScreen.classList.add('hidden');
             appScreen.classList.remove('hidden');
-            initializeMap();
+        }
+        
+        function showAuthScreen() {
+            appScreen.classList.add('hidden');
+            authScreen.classList.remove('hidden');
+            joinGroupModal.classList.add('hidden');
+        }
+        
+        // --- Main Application Logic ---
+        function initializeAppForGroup() {
+            showAppScreen();
+            
+            userIdDisplay.textContent = currentUser.uid;
+            groupCodeDisplay.textContent = currentGroup.code;
+            deviceNameInput.value = localStorage.getItem('deviceName') || '';
+
+            if (!map) initializeMap();
             startWatchingLocation();
-            startListeningToOtherUsers();
-            initializeWakeLock();
+            startListeningToGroupMembers();
+            // initializeWakeLock(); // Wake lock can be initialized here if needed
         }
 
         function initializeMap() {
-            if (map) return;
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 19
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
-        function centerOnCurrentUser() {
-            if (!currentUser || !mapObjects[currentUser.uid] || !mapObjects[currentUser.uid].marker) {
-                showNotification("Chưa có vị trí của bạn để hiển thị.");
-                return;
-            }
-            map.setView(mapObjects[currentUser.uid].marker.getLatLng(), 16);
-        }
-        
-        function fitAllUsers() {
-            const markers = Object.values(mapObjects).map(obj => obj.marker).filter(Boolean);
-            if (markers.length < 1) {
-                 showNotification("Không có người dùng nào để hiển thị.");
-                 return;
-            }
-            if (markers.length === 1) {
-                map.setView(markers[0].getLatLng(), 15);
-                return;
-            }
-            const bounds = L.latLngBounds(markers.map(m => m.getLatLng()));
-            map.fitBounds(bounds.pad(0.2));
-        }
-        
-        // --- Wake Lock Logic ---
-        const requestWakeLock = async () => {
-            if (!('wakeLock' in navigator)) return;
+        async function createGroup() {
+            const originalText = setLoadingState(true, createGroupBtn, 'Đang tạo...');
+            const groupCode = `NHOM-${Math.floor(1000 + Math.random() * 9000)}`;
+            const groupCollection = collection(db, "groups");
+            
             try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                wakeLock.addEventListener('release', () => {
-                    console.log('Wake Lock đã được giải phóng tự động.');
-                    updateWakeLockButtonUI(false);
-                    wakeLock = null;
+                const newGroupRef = await addDoc(groupCollection, {
+                    ownerId: currentUser.uid,
+                    code: groupCode,
+                    members: [currentUser.uid],
+                    createdAt: serverTimestamp()
                 });
-                console.log('Wake Lock đã được kích hoạt.');
-                updateWakeLockButtonUI(true);
-                showNotification('Chế độ màn hình luôn sáng đã được bật.');
-            } catch (err) {
-                console.error(`${err.name}, ${err.message}`);
-                updateWakeLockButtonUI(false);
-                // Không hiển thị lỗi cho người dùng vì đây có thể là do chính sách môi trường
-            }
-        };
 
-        const releaseWakeLock = async () => {
-            if (!wakeLock) return;
-            await wakeLock.release();
-            wakeLock = null;
-            updateWakeLockButtonUI(false);
-            showNotification('Chế độ màn hình luôn sáng đã được tắt.');
-        };
-        
-        function updateWakeLockButtonUI(isLocked) {
-             if (isLocked) {
-                wakeLockBtn.classList.add('text-yellow-500', 'bg-gray-200');
-                wakeLockBtn.title = 'Tắt chế độ luôn sáng';
-            } else {
-                wakeLockBtn.classList.remove('text-yellow-500', 'bg-gray-200');
-                wakeLockBtn.title = 'Giữ màn hình luôn sáng';
-            }
-        }
-
-        function initializeWakeLock() {
-            if ('wakeLock' in navigator) {
-                wakeLockBtn.classList.remove('hidden');
+                currentGroup = { id: newGroupRef.id, code: groupCode };
+                localStorage.setItem('groupId', currentGroup.id);
+                localStorage.setItem('groupCode', currentGroup.code);
                 
-                // SỬA LỖI: Gộp các trình nghe sự kiện thành một để tránh xung đột
-                wakeLockBtn.addEventListener('click', () => {
-                    if (wakeLock) {
-                        localStorage.setItem('wakeLockEnabled', 'false');
-                        releaseWakeLock();
-                    } else {
-                        localStorage.setItem('wakeLockEnabled', 'true');
-                        requestWakeLock();
-                    }
-                });
+                await ensureUserLocationDocExists();
+                initializeAppForGroup();
 
-                document.addEventListener('visibilitychange', async () => {
-                    if (document.visibilityState === 'visible' && localStorage.getItem('wakeLockEnabled') === 'true') {
-                       await requestWakeLock();
-                    }
-                });
+            } catch (error) {
+                console.error("Lỗi khi tạo nhóm:", error);
+                showNotification("Không thể tạo nhóm, vui lòng thử lại.");
+                createGroupBtn.disabled = false;
+                createGroupBtn.textContent = originalText;
             }
         }
-
-        function calculateAndSmoothSpeed(newPosition) {
-            if (!lastPosition) {
-                lastPosition = newPosition;
-                return 0;
-            }
-            const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude)
-                .distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
-            const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
-            if (timeSeconds <= 0) {
-                 lastPosition = newPosition;
-                 return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
-            }
-            const speedKmh = (distanceMeters / timeSeconds) * 3.6;
-            speedReadings.push(speedKmh);
-            if (speedReadings.length > SMOOTHING_FACTOR) speedReadings.shift();
-            lastPosition = newPosition; 
-            return speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
-        }
-
-        function startWatchingLocation() {
-            if (!navigator.geolocation) {
-                locationStatus.textContent = 'Trình duyệt không hỗ trợ';
+        
+        async function joinGroup(groupCode) {
+            if (!groupCode) {
+                showNotification("Vui lòng nhập mã mời.");
                 return;
             }
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    locationStatus.textContent = 'Đang hoạt động';
-                    const { latitude, longitude } = position.coords;
-                    const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
-                    latDisplay.textContent = latitude.toFixed(5);
-                    lngDisplay.textContent = longitude.toFixed(5);
-                    speedDisplay.textContent = calculatedSpeedKmh.toFixed(1);
-                    updateLocationInFirestore({ latitude, longitude, speedKmh: calculatedSpeedKmh });
-                },
-                (error) => {
-                    let message = 'Lỗi không xác định';
-                    if (error.code === error.PERMISSION_DENIED) message = 'Bạn đã từ chối quyền vị trí.';
-                    else if (error.code === error.POSITION_UNAVAILABLE) message = 'Vị trí không khả dụng.';
-                    locationStatus.textContent = message;
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-        
-        async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
-            if (!db || !currentUser) return;
-            const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
-            const newPoint = { lat: latitude, lng: longitude };
+            const originalText = setLoadingState(true, confirmJoinBtn, 'Đang kiểm tra...');
+            const groupQuery = query(collection(db, "groups"), where("code", "==", groupCode.toUpperCase()));
+            
             try {
-                const docSnap = await getDoc(userDocRef);
-                if (!docSnap.exists()) return;
-                const userData = docSnap.data();
-                const currentPath = userData.path || [];
-                if (currentPath.length >= PATH_ARCHIVE_THRESHOLD) {
-                    const newPath = [currentPath[currentPath.length - 1], newPoint];
-                    await addDoc(collection(db, FIRESTORE_COLLECTION, currentUser.uid, 'path_archives'), {
-                        segment: currentPath,
-                        createdAt: serverTimestamp()
-                    });
-                    await updateDoc(userDocRef, {
-                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
-                        timestamp: serverTimestamp(),
-                        lastSpeed: speedKmh,
-                        path: newPath
-                    });
-                } else {
-                    await updateDoc(userDocRef, {
-                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
-                        timestamp: serverTimestamp(),
-                        lastSpeed: speedKmh,
-                        path: arrayUnion(newPoint)
-                    });
+                const querySnapshot = await getDocs(groupQuery);
+                if (querySnapshot.empty) {
+                    showNotification("Mã nhóm không tồn tại. Vui lòng kiểm tra lại.");
+                    confirmJoinBtn.disabled = false;
+                    confirmJoinBtn.textContent = "Xác nhận";
+                    return;
                 }
-            } catch (error) {
-                console.error("Lỗi khi cập nhật vị trí:", error);
+                
+                const groupDoc = querySnapshot.docs[0];
+                currentGroup = { id: groupDoc.id, code: groupDoc.data().code };
+
+                await updateDoc(doc(db, "groups", currentGroup.id), {
+                    members: arrayUnion(currentUser.uid)
+                });
+
+                localStorage.setItem('groupId', currentGroup.id);
+                localStorage.setItem('groupCode', currentGroup.code);
+                
+                await ensureUserLocationDocExists();
+                initializeAppForGroup();
+
+            } catch(error) {
+                console.error("Lỗi khi tham gia nhóm:", error);
+                showNotification("Không thể tham gia nhóm. Vui lòng thử lại.");
+                 confirmJoinBtn.disabled = false;
+                 confirmJoinBtn.textContent = "Xác nhận";
             }
         }
         
-        function startListeningToOtherUsers() {
-            onSnapshot(collection(db, FIRESTORE_COLLECTION), (snapshot) => {
-                const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const activeUserIds = new Set(activeUsers.map(u => u.id));
-                activeUsers.forEach(user => updateUserOnMap(user.id, user));
+        async function leaveGroup() {
+            if (!currentGroup) return;
+
+            try {
+                const groupDocRef = doc(db, "groups", currentGroup.id);
+                await updateDoc(groupDocRef, {
+                    members: arrayRemove(currentUser.uid)
+                });
+            } catch(error) {
+                console.error("Lỗi khi rời nhóm:", error);
+            }
+
+            if (locationsUnsubscribe) locationsUnsubscribe();
+            localStorage.removeItem('groupId');
+            localStorage.removeItem('groupCode');
+            currentGroup = null;
+            Object.values(mapObjects).forEach(({marker, polyline}) => {
+                if (marker) map.removeLayer(marker);
+                if (polyline) map.removeLayer(polyline);
+            });
+            mapObjects = {};
+            
+            showAuthScreen();
+        }
+
+        async function ensureUserLocationDocExists() {
+            const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
+            const docSnap = await getDoc(locationDocRef);
+            if (!docSnap.exists()) {
+                await setDoc(locationDocRef, {
+                    name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
+                    timestamp: serverTimestamp(),
+                    path: []
+                });
+            }
+        }
+
+        function startListeningToGroupMembers() {
+            if (locationsUnsubscribe) locationsUnsubscribe(); 
+            
+            const locationsCollection = collection(db, `groups/${currentGroup.id}/locations`);
+            locationsUnsubscribe = onSnapshot(locationsCollection, (snapshot) => {
+                const activeUserIds = new Set();
+                snapshot.docs.forEach(doc => {
+                    activeUserIds.add(doc.id);
+                    updateUserOnMap(doc.id, doc.data());
+                });
+
                 Object.keys(mapObjects).forEach(userId => {
                     if (!activeUserIds.has(userId)) removeUserFromMap(userId);
                 });
-                updateUserListUI(activeUsers);
+                
+                updateUserListUI(snapshot.docs.map(d => ({id: d.id, ...d.data()})));
             });
         }
         
@@ -427,8 +364,9 @@
             const lastPoint = path[path.length - 1];
             const latLng = [lastPoint.lat, lastPoint.lng];
             const isCurrentUser = userId === currentUser.uid;
+            
             const now = Date.now();
-            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < 2 * 60 * 1000 : false;
             
             if (!mapObjects[userId]) mapObjects[userId] = { marker: null, polyline: null };
             
@@ -436,8 +374,7 @@
             const markerIcon = L.divIcon({
                 className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
                 html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
-                iconSize: isCurrentUser ? [28, 28] : [24, 24],
-                iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
+                iconSize: isCurrentUser ? [28, 28] : [24, 24], iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
             });
 
             if (userMapObject.marker) {
@@ -449,11 +386,7 @@
             
             userMapObject.marker.bindPopup(`<div class="font-sans"><strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}</div>`);
 
-            const polylineOptions = { 
-                color: isOnline ? (isCurrentUser ? '#22c55e' : '#3b82f6') : '#9ca3af',
-                weight: 4, opacity: isOnline ? 0.8 : 0.6,
-                dashArray: isOnline ? null : '5, 10'
-            };
+            const polylineOptions = { color: isOnline ? (isCurrentUser ? '#22c55e' : '#3b82f6') : '#9ca3af', weight: 4, opacity: isOnline ? 0.8 : 0.6, dashArray: isOnline ? null : '5, 10' };
             
             if (userMapObject.polyline) {
                 userMapObject.polyline.setLatLngs(path.map(p => [p.lat, p.lng])).setStyle(polylineOptions);
@@ -472,80 +405,77 @@
         
         function updateUserListUI(users) {
             userList.innerHTML = '';
-            const now = Date.now();
-            const sortedUsers = users.sort((a, b) => {
-                if (a.id === currentUser.uid) return -1;
-                if (b.id === currentUser.uid) return 1;
-                const aOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
-                const bOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
-                if (aOnline && !bOnline) return -1;
-                if (!aOnline && bOnline) return 1;
-                return (a.name || '').localeCompare(b.name || '');
-            });
-            
-            if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
-                userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có người dùng nào khác.</li>';
-                return;
-            }
-
-            sortedUsers.forEach(user => {
+            users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
-                const isOnline = user.timestamp ? (now - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
                 const li = document.createElement('li');
-                li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''}`;
-                li.innerHTML = `
-                    <div class="flex items-center justify-between cursor-pointer" onclick="window.panToUser('${user.id}')">
-                        <div class="flex items-center gap-3">
-                            <div class="relative"><div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div><span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-400'} border-2 border-white"></span></div>
-                            <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p><p class="text-xs text-gray-500">${isOnline ? `Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h` : `Hoạt động ${formatTimeAgo(user.timestamp)}`}</p></div>
-                        </div>
-                    </div>
-                    <div class="mt-2 text-right"><button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50">Xem đầy đủ</button></div>`;
+                li.className = 'p-2 rounded-md hover:bg-gray-100 cursor-pointer';
+                li.onclick = () => window.panToUser(user.id);
+                const statusText = `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+                li.innerHTML = `<div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div><div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p><p class="text-xs text-gray-500">${statusText}</p></div></div>`;
                 userList.appendChild(li);
             });
         }
         
-        window.loadAndDisplayFullPath = async (userId) => {
-            const button = document.getElementById(`load-history-${userId}`);
-            button.textContent = 'Đang tải...'; button.disabled = true;
-            try {
-                const userDocRef = doc(db, FIRESTORE_COLLECTION, userId);
-                const archiveQuery = query(collection(db, FIRESTORE_COLLECTION, userId, 'path_archives'), orderBy("createdAt", "asc"));
-                const [userDocSnap, archiveSnap] = await Promise.all([getDoc(userDocRef), getDocs(archiveQuery)]);
-                if (!userDocSnap.exists()) return;
-                const userData = userDocSnap.data();
-                const fullPath = [...archiveSnap.docs.flatMap(d => d.data().segment || []), ...(userData.path || [])];
-                updateUserOnMap(userId, { ...userData, path: fullPath });
-                button.textContent = 'Đã tải';
-            } catch (error) {
-                console.error(`Lỗi khi tải lịch sử:`, error);
-                button.textContent = 'Thử lại'; button.disabled = false;
-            }
-        };
-        
         window.panToUser = (userId) => {
-            if (mapObjects[userId] && mapObjects[userId].marker) {
+            if (mapObjects[userId]?.marker) {
                 map.setView(mapObjects[userId].marker.getLatLng(), 16);
                 mapObjects[userId].marker.openPopup();
             }
         };
         
-        // --- Event Listeners ---
-        startTrackingButton.addEventListener('click', () => {
-            signInAnonymously(auth).catch((error) => console.error("Lỗi đăng nhập:", error));
-        });
+        async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
+            if (!db || !currentUser || !currentGroup) return;
+            const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
+            await updateDoc(locationDocRef, {
+                timestamp: serverTimestamp(),
+                lastSpeed: speedKmh,
+                path: arrayUnion({ lat: latitude, lng: longitude })
+            }).catch(err => console.error("Lỗi cập nhật vị trí:", err));
+        }
+        
+        function startWatchingLocation() {
+            if (!navigator.geolocation) {
+                locationStatus.textContent = 'Trình duyệt không hỗ trợ'; return;
+            }
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    locationStatus.textContent = 'Đang hoạt động';
+                    const { latitude, longitude } = position.coords;
+                    const speedKmh = position.coords.speed ? position.coords.speed * 3.6 : 0;
+                    updateLocationInFirestore({ latitude, longitude, speedKmh });
+                },
+                (error) => { locationStatus.textContent = 'Lỗi vị trí.'; },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
 
-        saveNameButton.addEventListener('click', () => {
+        // --- Event Listeners ---
+        createGroupBtn.addEventListener('click', createGroup);
+        joinGroupBtn.addEventListener('click', () => joinGroupModal.classList.remove('hidden'));
+        cancelJoinBtn.addEventListener('click', () => joinGroupModal.classList.add('hidden'));
+        confirmJoinBtn.addEventListener('click', () => joinGroup(groupCodeInput.value));
+        leaveGroupBtn.addEventListener('click', () => {
+             if (confirm("Bạn có chắc chắn muốn rời khỏi nhóm này không? Thao tác này không thể hoàn tác.")) leaveGroup();
+        });
+        saveNameButton.addEventListener('click', async () => {
             const newName = deviceNameInput.value.trim();
-            if (newName) {
+            if (newName && currentUser && currentGroup) {
                 localStorage.setItem('deviceName', newName);
-                updateDoc(doc(db, FIRESTORE_COLLECTION, currentUser.uid), { name: newName });
-                showNotification(`Tên đã lưu thành "${newName}".`);
+                const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
+                await updateDoc(locationDocRef, { name: newName });
+                showNotification(`Tên đã được lưu thành "${newName}".`);
             }
         });
-        
-        centerOnMeBtn.addEventListener('click', centerOnCurrentUser);
-        fitAllUsersBtn.addEventListener('click', fitAllUsers);
+        copyCodeBtn.addEventListener('click', () => {
+             navigator.clipboard.writeText(groupCodeDisplay.textContent).then(() => {
+                 showNotification(`Đã sao chép mã: ${groupCodeDisplay.textContent}`);
+             });
+        });
+        centerOnMeBtn.addEventListener('click', () => { if(currentUser?.uid && mapObjects[currentUser.uid]?.marker) map.setView(mapObjects[currentUser.uid].marker.getLatLng(), 16) });
+        fitAllUsersBtn.addEventListener('click', () => {
+            const markers = Object.values(mapObjects).map(obj => obj.marker).filter(Boolean);
+            if(markers.length > 0) map.fitBounds(L.latLngBounds(markers.map(m => m.getLatLng())).pad(0.2));
+        });
 
         // --- Initialization ---
         function main() {
@@ -553,32 +483,43 @@
                 const firebaseApp = initializeApp(firebaseConfig);
                 db = getFirestore(firebaseApp);
                 auth = getAuth(firebaseApp);
+
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
-                        const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
-                        const docSnap = await getDoc(userDocRef);
-                        if (!docSnap.exists()) {
-                            await setDoc(userDocRef, {
-                                name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
-                                timestamp: serverTimestamp(), path: [] 
-                            });
+                        authStatus.textContent = 'Đã kết nối. Sẵn sàng!';
+
+                        // SỬA LỖI: Kích hoạt các nút sau khi đã xác thực
+                        createGroupBtn.disabled = false;
+                        joinGroupBtn.disabled = false;
+
+                        const storedGroupId = localStorage.getItem('groupId');
+                        const storedGroupCode = localStorage.getItem('groupCode');
+                        
+                        if (storedGroupId && storedGroupCode) {
+                            const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
+                            if (groupDoc.exists()) {
+                                currentGroup = { id: storedGroupId, code: storedGroupCode };
+                                initializeAppForGroup();
+                            } else {
+                                localStorage.removeItem('groupId');
+                                localStorage.removeItem('groupCode');
+                            }
                         }
-                        if(!appScreen.classList.contains('hidden')) return;
-                        initializeAppLogic();
                     } else {
-                        currentUser = null;
-                        authScreen.classList.remove('hidden');
-                        appScreen.classList.add('hidden');
+                        signInAnonymously(auth).catch((error) => {
+                             authStatus.textContent = 'Lỗi xác thực.';
+                             console.error("Lỗi đăng nhập:", error);
+                        });
                     }
                 });
             } catch (error) {
                 console.error("Lỗi khởi tạo Firebase:", error);
+                 authStatus.textContent = 'Lỗi khởi tạo ứng dụng.';
             }
         }
         
         main();
-        
     </script>
 </body>
 </html>
