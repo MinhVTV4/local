@@ -74,12 +74,12 @@
     </div>
 
     <!-- Main Application Screen: Hidden until authenticated -->
-    <div id="app-screen" class="hidden h-full w-full p-2 md:p-4">
-        <!-- Layout changed: Flex column on mobile, grid on medium screens and up -->
-        <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 h-full">
+    <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
+        <!-- Layout changed: Flex column on mobile (allowing scroll), grid on medium screens and up -->
+        <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
 
             <!-- Left Panel: Controls & Info -->
-            <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col md:h-full overflow-y-auto">
+            <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col md:overflow-y-auto">
                 <div>
                     <h2 class="text-2xl font-bold mb-1 text-gray-900">Bảng điều khiển</h2>
                     <p class="text-xs text-gray-500 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
@@ -107,10 +107,10 @@
                 </div>
 
                 <!-- Active Users List -->
-                <!-- Layout changed: Removed flex-grow to let content define height -->
                 <div class="flex flex-col min-h-0">
                     <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
-                    <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto">
+                    <!-- Layout changed: Added min/max height for better mobile display -->
+                    <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
                         <ul id="user-list" class="space-y-3">
                            <!-- JS will populate this list -->
                            <li class="text-gray-500 text-sm">Đang chờ người dùng khác...</li>
@@ -120,8 +120,8 @@
             </div>
 
             <!-- Right Panel: Map -->
-            <!-- Layout changed: Set specific height for mobile, auto for desktop -->
-            <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 h-[60vh] md:h-auto">
+            <!-- Layout changed: Set specific height for mobile, fill for desktop -->
+            <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 h-[65vh] md:h-auto">
                 <div id="map"></div>
             </div>
         </div>
