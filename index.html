@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.9 - Bảo mật Chat</title>
+    <title>Theo Dõi Vị Trí v6.0 - Sửa lỗi Chat Index</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -214,7 +214,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove, orderBy, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // Firebase config
         const firebaseConfig = { apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA", authDomain: "ailocal-86167.firebaseapp.com", projectId: "ailocal-86167", storageBucket: "ailocal-86167.appspot.com", messagingSenderId: "303592611625", appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138" };
         
         // --- DOM Elements ---
@@ -232,10 +231,8 @@
         const modalSearchUserInput = document.getElementById('modal-search-user-input'), modalStatusFilterButtons = document.getElementById('modal-status-filter-buttons'), viewToggleButtons = document.getElementById('view-toggle-buttons'), modalUserList = document.getElementById('modal-user-list');
         const notificationModal = document.getElementById('notification-modal'), notificationMessage = document.getElementById('notification-message');
         const centerOnMeBtn = document.getElementById('center-on-me-btn'), fitAllUsersBtn = document.getElementById('fit-all-users-btn'), wakeLockBtn = document.getElementById('wake-lock-btn');
-        // Chat Elements
         const openChatBtn = document.getElementById('open-chat-btn'), chatModal = document.getElementById('chat-modal'), closeChatBtn = document.getElementById('close-chat-btn');
         const conversationList = document.getElementById('conversation-list'), chatRecipientName = document.getElementById('chat-recipient-name'), messageContainer = document.getElementById('message-container'), chatInputForm = document.getElementById('chat-input-form'), messageInput = document.getElementById('message-input');
-        const chatNotificationBadge = document.getElementById('chat-notification-badge');
         
         // --- Global State ---
         let db, auth, currentUser = null, currentGroup = null, map = null, markerClusterGroup = null;
@@ -354,7 +351,6 @@
             if(confirm("HÀNH ĐỘNG KHÔNG THỂ HOÀN TÁC!\n\nBạn có chắc chắn muốn xóa vĩnh viễn nhóm này cho tất cả mọi người không?")) {
                 try {
                     await deleteDoc(doc(db, "groups", currentGroup.id));
-                    // Firestore Security Rules should handle cleanup, but good practice to leave group on client too
                     leaveGroup(true); 
                     showNotification("Đã xóa nhóm thành công.");
                 } catch(error) { console.error("Lỗi khi xóa nhóm:", error); }
@@ -667,30 +663,33 @@
             conversations = { 'GROUP_CHAT': { name: '💬 Chat Nhóm Chung', messages: [], unread: 0 }};
 
             // Listener for group chat
-            const groupChatQuery = query(collection(db, `groups/${currentGroup.id}/messages`), where("conversationId", "==", "GROUP_CHAT"), orderBy("timestamp", "asc"));
+            const groupChatQuery = query(collection(db, `groups/${currentGroup.id}/messages`), where("conversationId", "==", "GROUP_CHAT"));
             groupMessagesUnsubscribe = onSnapshot(groupChatQuery, (snapshot) => {
-                snapshot.docs.forEach(doc => {
-                     const message = { id: doc.id, ...doc.data() };
-                     conversations['GROUP_CHAT'].messages.push(message);
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        const message = { id: change.doc.id, ...change.doc.data() };
+                        conversations['GROUP_CHAT'].messages.push(message);
+                    }
                 });
                 updateConversationList();
                 if (currentChatId === 'GROUP_CHAT') openChat(currentChatId);
             });
 
             // Listener for private chats involving the current user
-            const privateChatQuery = query(collection(db, `groups/${currentGroup.id}/messages`), where("participants", "array-contains", currentUser.uid), orderBy("timestamp", "asc"));
+            const privateChatQuery = query(collection(db, `groups/${currentGroup.id}/messages`), where("participants", "array-contains", currentUser.uid));
             privateMessagesUnsubscribe = onSnapshot(privateChatQuery, (snapshot) => {
-                 snapshot.docs.forEach(doc => {
-                    const message = { id: doc.id, ...doc.data() };
-                    const convoId = message.conversationId;
-                    if (!conversations[convoId]) {
-                        const otherUserId = convoId.replace(currentUser.uid, '').replace('_', '');
-                        const otherUser = allUsersData.find(u => u.id === otherUserId);
-                        conversations[convoId] = { name: `💬 ${otherUser?.name || '...'}`, messages: [], with: otherUserId };
-                    }
-                    // Avoid duplicates by checking message id
-                    if (!conversations[convoId].messages.some(m => m.id === message.id)) {
-                        conversations[convoId].messages.push(message);
+                 snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        const message = { id: change.doc.id, ...change.doc.data() };
+                        const convoId = message.conversationId;
+                        if (!conversations[convoId]) {
+                            const otherUserId = convoId.replace(currentUser.uid, '').replace('_', '');
+                            const otherUser = allUsersData.find(u => u.id === otherUserId);
+                            conversations[convoId] = { name: `💬 ${otherUser?.name || '...'}`, messages: [], with: otherUserId };
+                        }
+                        if (!conversations[convoId].messages.some(m => m.id === message.id)) {
+                            conversations[convoId].messages.push(message);
+                        }
                     }
                  });
                  updateConversationList();
@@ -704,7 +703,7 @@
                 const li = document.createElement('li');
                 li.className = `p-4 cursor-pointer hover:bg-gray-100 ${convoId === currentChatId ? 'bg-blue-50' : ''}`;
                 li.onclick = () => openChat(convoId);
-                const lastMessage = convoData.messages[convoData.messages.length - 1];
+                const lastMessage = convoData.messages.sort((a,b) => a.timestamp - b.timestamp)[convoData.messages.length - 1];
                 li.innerHTML = `
                     <div class="font-bold">${convoData.name}</div>
                     <p class="text-sm text-gray-500 truncate">${lastMessage ? lastMessage.text : 'Chưa có tin nhắn'}</p>`;
@@ -849,4 +848,3 @@
     </script>
 </body>
 </html>
-
