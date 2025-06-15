@@ -174,7 +174,8 @@
         let currentUser = null;
         let map = null;
         let userMarkers = {}; // { userId: leafletMarker }
-        const FIRESTORE_COLLECTION = `artifacts/${appId}/public/locations`;
+        // CORRECTED: The collection path must have an odd number of segments.
+        const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
 
         // --- Utility Functions ---
         function showNotification(message) {
@@ -318,6 +319,10 @@
                         removeUserMarker(markerUserId);
                     }
                 });
+            }, (error) => {
+                // Add error handling for the snapshot listener
+                console.error("Firestore snapshot error:", error);
+                showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}. Hãy kiểm tra quy tắc bảo mật Firestore.`);
             });
         }
         
