@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v4.3 - Hệ thống Nhóm</title>
+    <title>Theo Dõi Vị Trí v4.4 - Quản lý Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -165,12 +165,12 @@
         // --- Global State ---
         let db, auth;
         let currentUser = null;
-        let currentGroup = null;
+        let currentGroup = null; // now {id, code, ownerId}
         let map = null;
         let mapObjects = {};
+        let groupUnsubscribe = null;
         let locationsUnsubscribe = null;
         let wakeLock = null;
-        // KHÔI PHỤC: Các biến cho tính toán tốc độ và lưu trữ
         let lastPosition = null;
         const speedReadings = [];
         const SMOOTHING_FACTOR = 5; 
@@ -213,7 +213,7 @@
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
             if (!map) initializeMap();
             startWatchingLocation();
-            startListeningToGroupMembers();
+            startListeningToGroupChanges(); // Changed function name for clarity
             initializeWakeLock();
         }
 
@@ -233,9 +233,8 @@
                 const newGroupRef = await addDoc(collection(db, "groups"), {
                     ownerId: currentUser.uid, code: groupCode, members: [currentUser.uid], createdAt: serverTimestamp()
                 });
-                currentGroup = { id: newGroupRef.id, code: groupCode };
+                currentGroup = { id: newGroupRef.id, code: groupCode, ownerId: currentUser.uid };
                 localStorage.setItem('groupId', currentGroup.id);
-                localStorage.setItem('groupCode', currentGroup.code);
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
             } catch (error) {
@@ -257,10 +256,10 @@
                     return;
                 }
                 const groupDoc = querySnapshot.docs[0];
-                currentGroup = { id: groupDoc.id, code: groupDoc.data().code };
+                const groupData = groupDoc.data();
+                currentGroup = { id: groupDoc.id, code: groupData.code, ownerId: groupData.ownerId };
                 await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayUnion(currentUser.uid) });
                 localStorage.setItem('groupId', currentGroup.id);
-                localStorage.setItem('groupCode', currentGroup.code);
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
             } catch(error) {
@@ -269,20 +268,41 @@
             }
         }
         
-        async function leaveGroup() {
+        async function leaveGroup(wasKicked = false) {
             if (!currentGroup) return;
-            try { await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayRemove(currentUser.uid) }); } 
-            catch(error) { console.error("Lỗi khi rời nhóm:", error); }
+            if (!wasKicked) {
+                 try { await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayRemove(currentUser.uid) }); } 
+                 catch(error) { console.error("Lỗi khi rời nhóm:", error); }
+            }
+            if (groupUnsubscribe) groupUnsubscribe();
             if (locationsUnsubscribe) locationsUnsubscribe();
             localStorage.removeItem('groupId');
-            localStorage.removeItem('groupCode');
             currentGroup = null;
             Object.values(mapObjects).forEach(({marker, polyline}) => {
                 if (marker) map.removeLayer(marker); if (polyline) map.removeLayer(polyline);
             });
             mapObjects = {};
             showAuthScreen();
+            if (wasKicked) {
+                showNotification("Bạn đã bị xóa khỏi nhóm.");
+            }
         }
+        
+        // NÂNG CẤP: Chức năng xóa thành viên cho chủ nhóm
+        window.removeUserFromGroup = async (userIdToRemove, userName) => {
+            if (!currentGroup || currentUser.uid !== currentGroup.ownerId) {
+                showNotification("Chỉ chủ nhóm mới có quyền xóa thành viên.");
+                return;
+            }
+            if(confirm(`Bạn có chắc chắn muốn xóa "${userName}" khỏi nhóm không?`)) {
+                const groupDocRef = doc(db, "groups", currentGroup.id);
+                await updateDoc(groupDocRef, {
+                    members: arrayRemove(userIdToRemove)
+                });
+                showNotification(`Đã xóa "${userName}" khỏi nhóm.`);
+            }
+        }
+
 
         async function ensureUserLocationDocExists() {
             const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
@@ -292,7 +312,6 @@
             }
         }
         
-        // KHÔI PHỤC: Logic Wake Lock
         const requestWakeLock = async () => {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
@@ -310,9 +329,8 @@
                 wakeLockBtn.classList.remove('hidden');
                 wakeLockBtn.addEventListener('click', () => {
                     const isLocking = !wakeLock;
-                    localStorage.setItem('wakeLockEnabled', isLocking);
-                    if(isLocking) requestWakeLock();
-                    else releaseWakeLock();
+                    localStorage.setItem('wakeLockEnabled', String(isLocking));
+                    if(isLocking) requestWakeLock(); else releaseWakeLock();
                 });
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible' && localStorage.getItem('wakeLockEnabled') === 'true') { requestWakeLock(); }
@@ -321,8 +339,30 @@
         }
         
         // --- Realtime Logic ---
-        function startListeningToGroupMembers() {
-            if (locationsUnsubscribe) locationsUnsubscribe(); 
+        // NÂNG CẤP: Lắng nghe cả thay đổi của nhóm (thành viên) và vị trí
+        function startListeningToGroupChanges() {
+            if (groupUnsubscribe) groupUnsubscribe();
+            
+            groupUnsubscribe = onSnapshot(doc(db, "groups", currentGroup.id), (groupDoc) => {
+                if (!groupDoc.exists()) {
+                    leaveGroup(true); // Nhóm đã bị xóa
+                    return;
+                }
+                const groupData = groupDoc.data();
+                if (!groupData.members.includes(currentUser.uid)) {
+                    leaveGroup(true); // Bị xóa khỏi nhóm
+                    return;
+                }
+                currentGroup.ownerId = groupData.ownerId; // Cập nhật ownerId
+                
+                // Chỉ lắng nghe vị trí sau khi xác nhận vẫn là thành viên
+                startListeningToLocations();
+            });
+        }
+
+        function startListeningToLocations() {
+            if (locationsUnsubscribe) return; // Chỉ chạy một lần
+            
             const locationsCollection = collection(db, `groups/${currentGroup.id}/locations`);
             locationsUnsubscribe = onSnapshot(locationsCollection, (snapshot) => {
                 const activeUserIds = new Set(snapshot.docs.map(d => d.id));
@@ -356,23 +396,34 @@
             }
         }
         
-        // KHÔI PHỤC: Giao diện người dùng với nút xem lịch sử
         function updateUserListUI(users) {
             userList.innerHTML = '';
+            const isOwner = currentUser.uid === currentGroup.ownerId;
+
             users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
                 const li = document.createElement('li');
                 li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
                 const statusText = `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+                const ownerIcon = user.id === currentGroup.ownerId ? '👑' : '';
+                
+                let removeButton = '';
+                if(isOwner && !isCurrentUser) {
+                    removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                    </button>`;
+                }
+
                 li.innerHTML = `
-                    <div class="flex items-center justify-between cursor-pointer" onclick="window.panToUser('${user.id}')">
-                        <div class="flex items-center gap-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
                             <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
                             <div>
-                                <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                                <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>
                                 <p class="text-xs text-gray-500">${statusText}</p>
                             </div>
                         </div>
+                        ${removeButton}
                     </div>
                     <div class="mt-2 text-right">
                         <button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50">
@@ -383,20 +434,17 @@
             });
         }
         
-        // KHÔI PHỤC: Hàm tải lịch sử đầy đủ
         window.loadAndDisplayFullPath = async (userId) => {
             const button = document.getElementById(`load-history-${userId}`);
             const originalText = button.textContent;
             setButtonLoadingState(button, true, originalText, 'Đang tải...');
             try {
-                const userDocRef = doc(db, `groups/${currentGroup.id}/locations`, userId);
                 const archiveQuery = query(collection(db, `groups/${currentGroup.id}/locations/${userId}/path_archives`), orderBy("createdAt", "asc"));
-                const [userDocSnap, archiveSnap] = await Promise.all([getDoc(userDocRef), getDocs(archiveQuery)]);
+                const [userDocSnap, archiveSnap] = await Promise.all([getDoc(doc(db, `groups/${currentGroup.id}/locations`, userId)), getDocs(archiveQuery)]);
                 if (!userDocSnap.exists()) { showNotification("Không tìm thấy dữ liệu người dùng."); return; }
                 const userData = userDocSnap.data();
                 const fullPath = [...archiveSnap.docs.flatMap(d => d.data().segment || []), ...(userData.path || [])];
                 updateUserOnMap(userId, { ...userData, path: fullPath });
-                showNotification(`Đã tải toàn bộ lịch sử cho ${userData.name || '...'}.`);
                 button.textContent = 'Đã tải';
                 button.disabled = true;
             } catch (error) {
@@ -407,7 +455,6 @@
 
         window.panToUser = (userId) => { if (mapObjects[userId]?.marker) { map.setView(mapObjects[userId].marker.getLatLng(), 16); mapObjects[userId].marker.openPopup(); } };
         
-        // KHÔI PHỤC: Logic tính toán tốc độ và lưu trữ
         function calculateAndSmoothSpeed(newPosition) {
             if (!lastPosition) { lastPosition = newPosition; return 0; }
             const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude).distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
@@ -490,9 +537,10 @@
                         if (storedGroupId) {
                             const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
                             if (groupDoc.exists()) {
-                                currentGroup = { id: storedGroupId, code: groupDoc.data().code };
+                                const groupData = groupDoc.data();
+                                currentGroup = { id: storedGroupId, code: groupData.code, ownerId: groupData.ownerId };
                                 initializeAppForGroup();
-                            } else { localStorage.removeItem('groupId'); localStorage.removeItem('groupCode'); }
+                            } else { localStorage.removeItem('groupId'); }
                         }
                     } else { signInAnonymously(auth).catch((err) => { console.error(err); authStatus.textContent = 'Lỗi xác thực.'; }); }
                 });
@@ -502,4 +550,4 @@
         main();
     </script>
 </body>
-</html>
+</ht
