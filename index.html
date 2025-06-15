@@ -141,8 +141,7 @@
         // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        // NEW: Import functions needed for persistent paths
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, deleteDoc, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
@@ -177,8 +176,13 @@
         let db, auth;
         let currentUser = null;
         let map = null;
-        let mapObjects = {}; // { userId: { marker, polyline, points } }
+        let mapObjects = {}; // { userId: { marker, polyline } }
         const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
+
+        // NEW: State for improved speed calculation
+        let lastPosition = null;
+        const speedReadings = [];
+        const SMOOTHING_FACTOR = 5; // Number of readings to average for smoothing
 
         // --- Utility Functions ---
         function showNotification(message) {
@@ -202,9 +206,6 @@
             initializeMap();
             startWatchingLocation();
             startListeningToOtherUsers();
-            
-            // NOTE: The automatic cleanup on exit is now disabled to allow paths to persist.
-            // setupInactiveUserCleanup(); 
         }
 
         /**
@@ -221,6 +222,45 @@
         }
 
         /**
+         * NEW: Calculates and smooths speed based on distance and time between position updates.
+         * @param {GeolocationPosition} newPosition - The new position object from watchPosition.
+         * @returns {number} The calculated and smoothed speed in km/h.
+         */
+        function calculateAndSmoothSpeed(newPosition) {
+            if (!lastPosition) {
+                lastPosition = newPosition;
+                return 0;
+            }
+
+            const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude)
+                .distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
+            
+            const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
+
+            // Avoid division by zero and nonsensical speeds
+            if (timeSeconds <= 0) {
+                 lastPosition = newPosition;
+                 return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
+            }
+
+            const speedMs = distanceMeters / timeSeconds;
+            const speedKmh = speedMs * 3.6;
+
+            // Add new reading to our array for smoothing
+            speedReadings.push(speedKmh);
+            if (speedReadings.length > SMOOTHING_FACTOR) {
+                speedReadings.shift(); // Keep the array at a fixed size
+            }
+
+            // Calculate the average of the last few readings
+            const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
+
+            lastPosition = newPosition; // Update last position for the next calculation
+            
+            return smoothedSpeed;
+        }
+
+        /**
          * Starts watching the user's geolocation.
          */
         function startWatchingLocation() {
@@ -233,14 +273,16 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     locationStatus.textContent = 'Đang hoạt động';
-                    const { latitude, longitude, speed } = position.coords;
-                    const speedKmh = (speed || 0) * 3.6;
+                    const { latitude, longitude } = position.coords;
+
+                    // NEW: Use our own calculation for speed
+                    const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
 
                     latDisplay.textContent = latitude.toFixed(5);
                     lngDisplay.textContent = longitude.toFixed(5);
-                    speedDisplay.textContent = speedKmh.toFixed(1);
+                    speedDisplay.textContent = calculatedSpeedKmh.toFixed(1);
                     
-                    updateLocationInFirestore({ latitude, longitude, speedKmh });
+                    updateLocationInFirestore({ latitude, longitude, speedKmh: calculatedSpeedKmh });
                 },
                 (error) => {
                     let message = 'Lỗi không xác định';
@@ -254,7 +296,7 @@
         }
         
         /**
-         * NEW: Appends the user's latest location to the path array in Firestore.
+         * Appends the user's latest location to the path array in Firestore.
          * @param {object} locationData - Contains latitude, longitude, and speedKmh.
          */
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
@@ -264,11 +306,10 @@
             const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                // Atomically add a new location to the "path" array field.
                 await updateDoc(userDocRef, {
                     name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
                     timestamp: serverTimestamp(),
-                    lastSpeed: speedKmh, // Store last known speed
+                    lastSpeed: speedKmh, 
                     path: arrayUnion(newPoint)
                 });
             } catch (error) {
@@ -302,7 +343,7 @@
         }
         
         /**
-         * NEW: Creates or updates a user's marker and ENTIRE polyline from the path data.
+         * Creates or updates a user's marker and ENTIRE polyline from the path data.
          * @param {string} userId - The ID of the user.
          * @param {object} userData - The user's data from Firestore, including the `path` array.
          */
@@ -415,20 +456,6 @@
             });
         }
         
-        /**
-         * This function is now disabled to allow paths to persist in Firestore.
-         */
-        function setupInactiveUserCleanup() {
-            /*
-            window.addEventListener('beforeunload', async (e) => {
-                if (db && currentUser) {
-                    const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
-                    await deleteDoc(userDocRef);
-                }
-            });
-            */
-        }
-
         // --- Event Listeners ---
         startTrackingButton.addEventListener('click', () => {
             authStatus.textContent = 'Đang kết nối...';
@@ -460,12 +487,10 @@
                 db = getFirestore(firebaseApp);
                 auth = getAuth(firebaseApp);
 
-                // NEW: Logic moved inside onAuthStateChanged to ensure document exists before starting app
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
                         
-                        // Check if user document exists, create if not
                         const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
                         const docSnap = await getDoc(userDocRef);
                         if (!docSnap.exists()) {
@@ -473,7 +498,7 @@
                                 await setDoc(userDocRef, {
                                     name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
                                     timestamp: serverTimestamp(),
-                                    path: [] // Initialize with an empty path
+                                    path: [] 
                                 });
                             } catch (error) {
                                 console.error("Error creating user document:", error);
