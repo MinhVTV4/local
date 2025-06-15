@@ -69,7 +69,7 @@
                 <div>
                     <h2 class="text-2xl font-bold mb-2 text-gray-900">Bảng điều khiển</h2>
                     
-                    <!-- NEW: Room ID Display -->
+                    <!-- Room ID Display -->
                     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                         <h3 class="font-semibold text-sm mb-1 text-blue-800">ID Phòng (Chia sẻ cho bạn bè)</h3>
                         <div class="flex items-center gap-2">
@@ -129,13 +129,14 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Config ---
+        // THAY ĐỔI: Đã khôi phục lại cấu hình Firebase gốc của bạn
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyABC...",
-            authDomain: "your-project.firebaseapp.com",
-            projectId: "your-project",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "1234567890",
-            appId: "1:1234567890:web:abcdef123456"
+            apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
+            authDomain: "ailocal-86167.firebaseapp.com",
+            projectId: "ailocal-86167",
+            storageBucket: "ailocal-86167.appspot.com",
+            messagingSenderId: "303592611625",
+            appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
         };
         const PATH_ARCHIVE_THRESHOLD = 50;
         const OFFLINE_THRESHOLD_MINUTES = 2;
@@ -165,12 +166,12 @@
         // --- Global State ---
         let db, auth, firebaseApp;
         let currentUser = null;
-        let currentRoomId = null; // NEW: Holds the ID of the current room
+        let currentRoomId = null; 
         let map = null;
         let mapObjects = {};
         let lastPosition = null;
         const speedReadings = [];
-        let authStateUnsubscribe = null; // To detach the listener
+        let authStateUnsubscribe = null; 
 
         // --- Utility Functions ---
         const showNotification = (message) => {
@@ -180,6 +181,25 @@
 
         const generateRoomId = () => {
             return Math.random().toString(36).substring(2, 8).toUpperCase();
+        };
+        
+        const formatTimeAgo = (timestamp) => {
+            if (!timestamp) return 'không rõ';
+            const now = new Date();
+            const seconds = Math.floor((now - timestamp.toDate()) / 1000);
+
+            if (seconds < 60) return 'vừa xong';
+            let interval = seconds / 31536000;
+            if (interval > 1) return Math.floor(interval) + " năm trước";
+            interval = seconds / 2592000;
+            if (interval > 1) return Math.floor(interval) + " tháng trước";
+            interval = seconds / 86400;
+            if (interval > 1) return Math.floor(interval) + " ngày trước";
+            interval = seconds / 3600;
+            if (interval > 1) return Math.floor(interval) + " giờ trước";
+            interval = seconds / 60;
+            if (interval > 1) return Math.floor(interval) + " phút trước";
+            return 'vừa xong';
         };
 
         // --- Room & URL Handling ---
@@ -213,24 +233,29 @@
             startListeningToOtherUsers();
         };
 
-        const initializeMap = () => { /* ... (same as before) ... */ };
-        // ... (other functions like calculateAndSmoothSpeed, removeUserFromMap, etc. remain mostly the same)
+        const initializeMap = () => {
+            if (map) return;
+            map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+        };
+        
         const calculateAndSmoothSpeed = (newPosition) => {
              if (!lastPosition) {
                 lastPosition = newPosition;
                 return 0;
             }
-
             const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude)
                 .distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
-            
             const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
 
             if (timeSeconds <= 0) {
                  lastPosition = newPosition;
                  return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
             }
-
             const speedMs = distanceMeters / timeSeconds;
             const speedKmh = speedMs * 3.6;
 
@@ -238,12 +263,11 @@
             if (speedReadings.length > 5) { // SMOOTHING_FACTOR
                 speedReadings.shift(); 
             }
-
             const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
             lastPosition = newPosition; 
             
             return smoothedSpeed;
-        }
+        };
 
         const startWatchingLocation = () => {
              if (!navigator.geolocation) {
@@ -266,14 +290,19 @@
                     
                     updateLocationInFirestore({ latitude, longitude, speedKmh: calculatedSpeedKmh });
                 },
-                (error) => { /* ... error handling ... */ },
+                (error) => {
+                    let message = 'Lỗi không xác định';
+                    if (error.code === error.PERMISSION_DENIED) message = 'Bạn đã từ chối quyền vị trí.';
+                    else if (error.code === error.POSITION_UNAVAILABLE) message = 'Vị trí không khả dụng.';
+                    locationStatus.textContent = message;
+                    locationStatus.classList.add('text-yellow-600');
+                    locationStatus.classList.remove('text-green-600');
+                    showNotification(message);
+                },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         };
 
-        /**
-         * UPDATED: Firestore paths now use 'currentRoomId'
-         */
         const updateLocationInFirestore = async ({ latitude, longitude, speedKmh }) => {
             if (!db || !currentUser || !currentRoomId) return;
 
@@ -310,9 +339,6 @@
             }
         };
 
-        /**
-         * UPDATED: Firestore paths now use 'currentRoomId'
-         */
         const startListeningToOtherUsers = () => {
             if (!db || !currentRoomId) return;
             const usersCollection = collection(db, `artifacts/public/data/rooms/${currentRoomId}/users`);
@@ -327,36 +353,147 @@
             }, (error) => console.error("Lỗi snapshot:", error));
         };
         
-        const updateUserOnMap = (userId, userData) => { /* ... (same as before) ... */ };
-        const removeUserFromMap = (userId) => { /* ... (same as before) ... */ };
-        const updateUserListUI = (users) => { /* ... (same as before) ... */ };
+        const updateUserOnMap = (userId, userData) => {
+            if (!map || !userData.path || userData.path.length === 0) return;
 
+            const path = userData.path;
+            const lastPoint = path[path.length - 1];
+            const latLng = [lastPoint.lat, lastPoint.lng];
+            const isCurrentUser = userId === currentUser.uid;
+            
+            const now = Date.now();
+            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+            
+            if (!mapObjects[userId]) {
+                mapObjects[userId] = { marker: null, polyline: null };
+            }
+            
+            const userMapObject = mapObjects[userId];
 
-        /**
-         * NEW: Main initialization logic driven by URL
-         */
+            const markerIcon = L.divIcon({
+                className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
+                html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
+                iconSize: isCurrentUser ? [28, 28] : [24, 24],
+                iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
+            });
+
+            if (userMapObject.marker) {
+                userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
+            } else {
+                userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
+                if (isCurrentUser && path.length <= 2) { 
+                    map.setView(latLng, 15);
+                }
+            }
+            
+            const popupContent = `
+                <div class="font-sans">
+                    <strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>
+                    Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h
+                    ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}
+                </div>`;
+            userMapObject.marker.bindPopup(popupContent);
+
+            const polylinePoints = path.map(p => [p.lat, p.lng]);
+            const onlineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
+            const offlineColor = '#9ca3af';
+
+            const polylineOptions = { 
+                color: isOnline ? onlineColor : offlineColor,
+                weight: 4,
+                opacity: isOnline ? 0.8 : 0.6,
+                dashArray: isOnline ? null : '5, 10'
+            };
+            
+            if (userMapObject.polyline) {
+                userMapObject.polyline.setLatLngs(polylinePoints);
+                userMapObject.polyline.setStyle(polylineOptions);
+            } else {
+                userMapObject.polyline = L.polyline(polylinePoints, polylineOptions).addTo(map);
+            }
+        };
+
+        const removeUserFromMap = (userId) => {
+            if (mapObjects[userId]) {
+                const { marker, polyline } = mapObjects[userId];
+                if (marker) map.removeLayer(marker);
+                if (polyline) map.removeLayer(polyline);
+                delete mapObjects[userId];
+            }
+        };
+
+        const updateUserListUI = (users) => {
+            userList.innerHTML = '';
+            const now = Date.now();
+
+            const sortedUsers = users.sort((a, b) => {
+                if (a.id === currentUser.uid) return -1;
+                if (b.id === currentUser.uid) return 1;
+
+                const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+                const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
+                if (aIsOnline && !bIsOnline) return -1;
+                if (!aIsOnline && bIsOnline) return 1;
+                
+                return (a.name || '').localeCompare(b.name || '');
+            });
+            
+            if (sortedUsers.length === 0) {
+                 userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có ai trong phòng.</li>';
+                return;
+            }
+
+            sortedUsers.forEach(user => {
+                const isCurrentUser = user.id === currentUser.uid;
+                const isOnline = user.timestamp ? (now - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
+                const li = document.createElement('li');
+                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''} cursor-pointer`;
+                li.onclick = () => {
+                    if (mapObjects[user.id] && mapObjects[user.id].marker) {
+                        map.setView(mapObjects[user.id].marker.getLatLng(), 16);
+                        mapObjects[user.id].marker.openPopup();
+                    }
+                };
+
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                const statusText = isOnline ? `Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h` : `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+
+                li.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
+                                ${(user.name || 'A').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                            <p class="text-xs text-gray-500">${statusText}</p>
+                        </div>
+                    </div>
+                `;
+                userList.appendChild(li);
+            });
+        };
+
         const main = () => {
-            // Initialize Firebase App
             firebaseApp = initializeApp(firebaseConfig);
             db = getFirestore(firebaseApp);
             auth = getAuth(firebaseApp);
 
-            // Check for room ID in the URL
             const urlParams = new URLSearchParams(window.location.search);
             currentRoomId = urlParams.get('room');
 
             if (currentRoomId) {
-                // User is in a room, proceed to authentication and app logic
-                landingScreen.classList.add('hidden'); // Hide landing screen
-                document.title = `Phòng: ${currentRoomId}`; // Update page title
+                landingScreen.classList.add('hidden');
+                document.title = `Phòng: ${currentRoomId}`;
 
-                // Listen for authentication state changes
                 authStateUnsubscribe = onAuthStateChanged(auth, async (user) => {
                     if (user) {
-                        // User is signed in
                         currentUser = user;
 
-                        // Check if user document exists, create if not
                         const userDocRef = doc(db, `artifacts/public/data/rooms/${currentRoomId}/users`, currentUser.uid);
                         const docSnap = await getDoc(userDocRef);
                         if (!docSnap.exists()) {
@@ -367,13 +504,10 @@
                             });
                         }
                         
-                        // If app screen is already visible, do nothing
                         if(!appScreen.classList.contains('hidden')) return;
-
                         initializeAppLogic();
 
                     } else {
-                        // User is not signed in, sign in anonymously
                         signInAnonymously(auth).catch((error) => {
                             console.error("Lỗi đăng nhập ẩn danh:", error);
                             showNotification(`Không thể tham gia phòng: ${error.message}`);
@@ -382,16 +516,13 @@
                 });
 
             } else {
-                // No room ID in URL, show the landing page
                 landingScreen.classList.remove('hidden');
                 appScreen.classList.add('hidden');
                 
-                // Set up landing page buttons
                 createRoomButton.addEventListener('click', handleCreateRoom);
                 joinRoomButton.addEventListener('click', handleJoinRoom);
             }
 
-            // --- Event Listeners for App Screen ---
             saveNameButton.addEventListener('click', () => {
                 const newName = deviceNameInput.value.trim();
                 if (newName) {
@@ -403,11 +534,18 @@
             });
 
             copyRoomIdButton.addEventListener('click', () => {
-                navigator.clipboard.writeText(currentRoomId).then(() => {
+                const textArea = document.createElement("textarea");
+                textArea.value = currentRoomId;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
                     showNotification(`Đã chép ID Phòng: ${currentRoomId}`);
-                }).catch(err => {
+                } catch (err) {
                     showNotification('Lỗi khi chép ID.');
-                });
+                }
+                document.body.removeChild(textArea);
             });
         };
 
