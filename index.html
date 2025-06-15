@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.4 - Quản lý Nhóm lớn</title>
+    <title>Theo Dõi Vị Trí v5.5 - Cải tiến Danh sách Thành viên</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -122,8 +122,11 @@
                 </div>
 
                 <div class="flex flex-col min-h-0 mt-4">
-                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên (<span id="member-count">0</span>)</h3>
-                    <button id="manage-members-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Quản lý Thành viên</button>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Thành viên</h3>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                         <ul id="user-list-preview" class="space-y-3"></ul>
+                    </div>
+                    <button id="manage-members-btn" class="w-full mt-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Xem tất cả & Quản lý (<span id="member-count">0</span>)</button>
                 </div>
             </div>
 
@@ -214,6 +217,7 @@
         const saveNameButton = document.getElementById('save-name-button');
         const cancelEditNameBtn = document.getElementById('cancel-edit-name-btn');
         const leaveGroupBtn = document.getElementById('leave-group-btn');
+        const userListPreview = document.getElementById('user-list-preview');
         const memberCountSpan = document.getElementById('member-count');
         const manageMembersBtn = document.getElementById('manage-members-btn');
         const membersModal = document.getElementById('members-modal');
@@ -412,6 +416,7 @@
                 allUsersData.forEach(user => updateUserOnMap(user.id, user));
                 Object.keys(mapObjects).forEach(userId => { if (!activeUserIds.has(userId)) removeUserFromMap(userId); });
                 updateUserListUI(allUsersData);
+                updateUserListPreview(allUsersData);
             });
         }
         
@@ -447,6 +452,36 @@
                 if (mapObjects[userId].marker) markerClusterGroup.removeLayer(mapObjects[userId].marker);
                 if (mapObjects[userId].polyline) map.removeLayer(mapObjects[userId].polyline);
                 delete mapObjects[userId];
+            }
+        }
+        
+        function updateUserListPreview(users) {
+            userListPreview.innerHTML = '';
+            const previewUsers = users.slice(0, 4);
+
+            previewUsers.forEach(user => {
+                const isCurrentUser = user.id === currentUser.uid;
+                const isOnline = user.timestamp ? (Date.now() - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                
+                const li = document.createElement('li');
+                li.className = 'flex items-center gap-3 cursor-pointer p-1 rounded-md hover:bg-gray-100';
+                li.onclick = () => window.panToUser(user.id, true);
+                li.innerHTML = `
+                    <div class="relative">
+                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white text-sm">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                        <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ${statusDotColor} border-2 border-white"></span>
+                    </div>
+                    <p class="font-medium text-gray-800 text-sm truncate">${user.name || 'Người dùng ẩn danh'}</p>
+                `;
+                userListPreview.appendChild(li);
+            });
+
+             if (users.length > 4) {
+                const li = document.createElement('li');
+                li.className = 'text-center text-sm text-gray-500 pt-2';
+                li.textContent = `...và ${users.length - 4} người khác`;
+                userListPreview.appendChild(li);
             }
         }
         
@@ -514,9 +549,9 @@
             } catch (error) { console.error(`Lỗi tải lịch sử:`, error); setButtonLoadingState(button, false, originalText); }
         };
 
-        window.panToUser = (userId) => { 
+        window.panToUser = (userId, fromPreview = false) => { 
             if (mapObjects[userId]?.marker) {
-                membersModal.classList.add('hidden'); // Close modal on selection
+                if(fromPreview) membersModal.classList.add('hidden');
                 markerClusterGroup.zoomToShowLayer(mapObjects[userId].marker, () => mapObjects[userId].marker.openPopup());
             }
         };
@@ -667,3 +702,5 @@
     </script>
 </body>
 </html>
+" and the query is "bỏ đi dòng code này     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+". Please answer my que
