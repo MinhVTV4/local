@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.1 - Hoàn thiện Quản lý</title>
+    <title>Theo Dõi Vị Trí v5.2 - Bản Sửa Lỗi</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -325,13 +325,10 @@
             if(confirm("HÀNH ĐỘNG KHÔNG THỂ HOÀN TÁC!\n\nBạn có chắc chắn muốn xóa vĩnh viễn nhóm này cho tất cả mọi người không?")) {
                 try {
                     await deleteDoc(doc(db, "groups", currentGroup.id));
-                    // No need to delete subcollections manually on client, they will be orphaned but won't be accessible.
-                    // The onSnapshot listener on other clients will fire, see the group is gone, and trigger their leaveGroup(true).
                     leaveGroup(true); 
                     showNotification("Đã xóa nhóm thành công.");
                 } catch(error) {
                     console.error("Lỗi khi xóa nhóm:", error);
-                    showNotification("Không thể xóa nhóm, vui lòng thử lại.");
                 }
             }
         }
@@ -462,10 +459,14 @@
                 if(isOwner && !isCurrentUser) {
                     removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>`;
                 }
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
                 li.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
-                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                           <div class="relative">
+                               <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                               <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                           </div>
                             <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${statusText}</p></div>
                         </div>
                         ${removeButton}
@@ -626,4 +627,4 @@
         main();
     </script>
 </body>
-</ht
+</html>
