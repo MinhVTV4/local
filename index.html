@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí Thời Gian Thực - V3.1 (Xem Lịch Sử)</title>
+    <title>Theo Dõi Vị Trí Thời Gian Thực - V3.2 (Điều Khiển Bản Đồ)</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -49,12 +49,18 @@
             border: 3px solid white;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        /* Ensure Leaflet map renders correctly */
+        /* Container for the map to position controls */
+        #map-container {
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
         #map {
             height: 100%;
             width: 100%;
             border-radius: 0.75rem; /* rounded-xl */
         }
+        /* Ensure Leaflet controls are on top */
         .leaflet-pane { z-index: 1; }
         .leaflet-top, .leaflet-bottom { z-index: 2; }
     </style>
@@ -75,7 +81,6 @@
 
     <!-- Main Application Screen: Hidden until authenticated -->
     <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
-        <!-- Layout changed: Flex column on mobile (allowing scroll), grid on medium screens and up -->
         <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
 
             <!-- Left Panel: Controls & Info -->
@@ -120,7 +125,23 @@
 
             <!-- Right Panel: Map -->
             <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 h-[65vh] md:h-auto">
-                <div id="map"></div>
+                <div id="map-container">
+                    <div id="map"></div>
+                    <!-- Map control buttons -->
+                    <div class="absolute top-2 right-2 z-[999] flex flex-col gap-2">
+                        <button id="center-on-me-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Về vị trí của tôi">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                              <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" />
+                              <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V12a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V6Z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button id="fit-all-users-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-bold w-10 h-10 rounded-full shadow-md flex items-center justify-center" title="Xem tất cả">
+                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                             <path d="M18.375 2.25a.75.75 0 0 0-1.125.41L15.75 6H12.75a.75.75 0 0 0 0 1.5h3.438L15 9.688a.75.75 0 0 0 1.125.41l3.375-3.375a.75.75 0 0 0 0-1.06L19.5 5.625l-1.937-1.938a.75.75 0 0 0-.188-.437ZM19.5 6.438l.938.937-2.25 2.25a.75.75 0 0 0 0 1.06l.938.938-1.5 1.5a.75.75 0 0 0-1.06 0l-3.75 3.75a.75.75 0 0 0 0 1.06l1.5 1.5-.937.937a.75.75 0 0 0-1.06 0l-3.375-3.375a.75.75 0 0 0-1.06 0L4.5 18.375a.75.75 0 0 0 .41 1.125l3.375 1.125a.75.75 0 0 0 .6-.094l1.625-1.083a.75.75 0 0 0 .281-.53v-3.438l1.5-1.5a.75.75 0 0 0 1.06 0l3-3a.75.75 0 0 0 0-1.06l-1.5-1.5.938-.937a.75.75 0 0 0 0-1.06L19.5 6.438Z" />
+                           </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -139,14 +160,14 @@
     <!-- Firebase JS SDK -->
     <script type="module">
         // Import Firebase modules
-        // NÂNG CẤP: Thêm 'getDocs' và 'query' để đọc toàn bộ lịch sử
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'live-location-tracker-v3-2';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // This is a public test key, replace with your own if deploying
             apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
             authDomain: "ailocal-86167.firebaseapp.com",
             projectId: "ailocal-86167",
@@ -172,6 +193,8 @@
         const userList = document.getElementById('user-list');
         const notificationModal = document.getElementById('notification-modal');
         const notificationMessage = document.getElementById('notification-message');
+        const centerOnMeBtn = document.getElementById('center-on-me-btn');
+        const fitAllUsersBtn = document.getElementById('fit-all-users-btn');
         
         // --- Global State ---
         let db, auth;
@@ -179,7 +202,6 @@
         let map = null;
         let mapObjects = {}; // { userId: { marker, polyline } }
         const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
-
         let lastPosition = null;
         const speedReadings = [];
         const SMOOTHING_FACTOR = 5; 
@@ -223,12 +245,41 @@
 
         function initializeMap() {
             if (map) return;
+            // Initialize map view to Hanoi, Vietnam
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
+        }
+
+        function centerOnCurrentUser() {
+            if (!currentUser || !mapObjects[currentUser.uid] || !mapObjects[currentUser.uid].marker) {
+                showNotification("Chưa có vị trí của bạn để hiển thị.");
+                return;
+            }
+            const userMarker = mapObjects[currentUser.uid].marker;
+            map.setView(userMarker.getLatLng(), 16); // Zoom to level 16
+        }
+        
+        function fitAllUsers() {
+            const markers = Object.values(mapObjects)
+                .map(obj => obj.marker)
+                .filter(marker => marker != null);
+
+            if (markers.length === 0) {
+                 showNotification("Không có người dùng nào để hiển thị trên bản đồ.");
+                 return;
+            }
+            
+            if (markers.length === 1) {
+                map.setView(markers[0].getLatLng(), 15);
+                return;
+            }
+
+            const bounds = L.latLngBounds(markers.map(m => m.getLatLng()));
+            map.fitBounds(bounds.pad(0.2)); // Add 20% padding
         }
 
         function calculateAndSmoothSpeed(newPosition) {
@@ -306,7 +357,6 @@
                         lastSpeed: speedKmh,
                         path: newPath
                     });
-                    console.log(`Đã lưu trữ thành công cho người dùng ${currentUser.uid}`);
                 } else {
                     await updateDoc(userDocRef, {
                         name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
@@ -317,7 +367,6 @@
                 }
             } catch (error) {
                 console.error("Lỗi khi cập nhật vị trí:", error);
-                showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
         }
         
@@ -394,9 +443,6 @@
             }
         }
         
-        /**
-         * NÂNG CẤP: Giao diện danh sách người dùng giờ có thêm nút để tải toàn bộ lịch sử
-         */
         function updateUserListUI(users) {
             userList.innerHTML = '';
             const now = Date.now();
@@ -447,8 +493,7 @@
                 userList.appendChild(li);
             });
         }
-
-        // NÂNG CẤP: Hàm mới để tải và hiển thị toàn bộ lịch sử đường đi
+        
         window.loadAndDisplayFullPath = async (userId) => {
             const button = document.getElementById(`load-history-${userId}`);
             button.textContent = 'Đang tải...';
@@ -457,11 +502,7 @@
             try {
                 const userDocRef = doc(db, FIRESTORE_COLLECTION, userId);
                 const archiveCollectionRef = collection(db, FIRESTORE_COLLECTION, userId, 'path_archives');
-                
-                // Sắp xếp các đoạn lưu trữ theo thời gian tạo để đảm bảo thứ tự chính xác
                 const archiveQuery = query(archiveCollectionRef, orderBy("createdAt", "asc"));
-
-                // Lấy tài liệu chính và các tài liệu lưu trữ cùng lúc
                 const [userDocSnap, archiveSnap] = await Promise.all([
                     getDoc(userDocRef),
                     getDocs(archiveQuery)
@@ -473,22 +514,12 @@
                 }
 
                 const userData = userDocSnap.data();
-                
-                // Nối các đoạn đường đã lưu trữ
                 const archivedPath = archiveSnap.docs.flatMap(doc => doc.data().segment || []);
-
-                // Kết hợp đường đi đã lưu trữ với đường đi hiện tại trong tài liệu chính
                 const fullPath = [...archivedPath, ...(userData.path || [])];
-
-                // Cập nhật lại đối tượng userData với đường đi đầy đủ
                 const updatedUserData = { ...userData, path: fullPath };
-
-                // Vẽ lại đường đi của người dùng trên bản đồ với dữ liệu đầy đủ
                 updateUserOnMap(userId, updatedUserData);
-
                 showNotification(`Đã tải toàn bộ lịch sử cho ${userData.name || 'Người dùng ẩn danh'}.`);
                 button.textContent = 'Đã tải';
-
             } catch (error) {
                 console.error(`Lỗi khi tải lịch sử cho ${userId}:`, error);
                 showNotification("Không thể tải lịch sử. Vui lòng thử lại.");
@@ -497,7 +528,6 @@
             }
         };
         
-        // NÂNG CẤP: Hàm nhỏ để pan tới người dùng khi click
         window.panToUser = (userId) => {
             if (mapObjects[userId] && mapObjects[userId].marker) {
                 map.setView(mapObjects[userId].marker.getLatLng(), 16);
@@ -528,6 +558,9 @@
                  showNotification('Vui lòng nhập tên hợp lệ.');
             }
         });
+        
+        centerOnMeBtn.addEventListener('click', centerOnCurrentUser);
+        fitAllUsersBtn.addEventListener('click', fitAllUsers);
 
         // --- Initialization ---
         function main() {
@@ -550,7 +583,6 @@
                                 });
                             } catch (error) {
                                 console.error("Lỗi khi tạo tài liệu người dùng:", error);
-                                showNotification("Không thể tạo hồ sơ người dùng.");
                                 return;
                             }
                         }
@@ -568,7 +600,6 @@
             } catch (error) {
                 console.error("Lỗi khởi tạo Firebase:", error);
                 authStatus.textContent = "Lỗi khởi tạo. Kiểm tra console.";
-                showNotification(`Không thể khởi tạo ứng dụng: ${error.message}`);
             }
         }
         
