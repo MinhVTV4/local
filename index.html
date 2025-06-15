@@ -75,6 +75,7 @@
 
     <!-- Main Application Screen: Hidden until authenticated -->
     <div id="app-screen" class="hidden min-h-screen w-full p-2 md:p-4">
+        <!-- Layout changed: Flex column on mobile (allowing scroll), grid on medium screens and up -->
         <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 md:h-[calc(100vh-2rem)]">
 
             <!-- Left Panel: Controls & Info -->
@@ -84,6 +85,7 @@
                     <p class="text-xs text-gray-500 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
                     <p class="text-xs text-gray-500 mb-4 break-all">ID của bạn: <span id="user-id-display" class="font-mono"></span></p>
 
+                    <!-- Your Info -->
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                         <h3 class="font-semibold text-lg mb-2 text-gray-800">Thông tin của bạn</h3>
                         <div class="space-y-1 text-sm text-gray-700">
@@ -94,6 +96,7 @@
                         </div>
                     </div>
 
+                    <!-- Set Device Name -->
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                          <h3 class="font-semibold text-lg mb-2 text-gray-800">Tên hiển thị</h3>
                          <div class="flex gap-2">
@@ -103,12 +106,13 @@
                     </div>
                 </div>
 
-                <!-- Journeys List -->
+                <!-- Active Users List -->
                 <div class="flex flex-col min-h-0">
-                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Các hành trình</h3>
-                    <div id="journeys-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
-                        <ul id="journeys-list" class="space-y-3">
-                           <li class="text-gray-500 text-sm">Chưa có hành trình nào.</li>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
+                    <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
+                        <ul id="user-list" class="space-y-3">
+                           <!-- JS will populate this list -->
+                           <li class="text-gray-500 text-sm">Đang chờ người dùng khác...</li>
                         </ul>
                     </div>
                 </div>
@@ -134,9 +138,10 @@
     
     <!-- Firebase JS SDK -->
     <script type="module">
+        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
@@ -163,7 +168,7 @@
         const speedDisplay = document.getElementById('speed-display');
         const deviceNameInput = document.getElementById('device-name-input');
         const saveNameButton = document.getElementById('save-name-button');
-        const journeysList = document.getElementById('journeys-list');
+        const userList = document.getElementById('user-list');
         const notificationModal = document.getElementById('notification-modal');
         const notificationMessage = document.getElementById('notification-message');
         
@@ -171,20 +176,44 @@
         let db, auth;
         let currentUser = null;
         let map = null;
-        let polylines = {}; // { journeyId: leafletPolyline }
-        let userMarker = null; // Only one marker for the current user
-        const USER_COLLECTION = `artifacts/${appId}/public/data/users`;
-        let currentJourneyId = null;
+        let mapObjects = {}; // { userId: { marker, polyline } }
+        const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
 
         let lastPosition = null;
         const speedReadings = [];
         const SMOOTHING_FACTOR = 5; 
-        const JOURNEY_BREAK_THRESHOLD_MINUTES = 10;
+
+        // NEW: Constant for determining offline status
+        const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
         function showNotification(message) {
             notificationMessage.textContent = message;
             notificationModal.classList.remove('hidden');
+        }
+
+        /**
+         * NEW: Utility to format relative time for display.
+         * @param {Firebase.Timestamp} timestamp - The Firestore timestamp object.
+         * @returns {string} A human-readable time string (e.g., "vừa xong", "5 phút trước").
+         */
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return 'không rõ';
+            const now = new Date();
+            const seconds = Math.floor((now - timestamp.toDate()) / 1000);
+
+            if (seconds < 60) return 'vừa xong';
+            let interval = seconds / 31536000;
+            if (interval > 1) return Math.floor(interval) + " năm trước";
+            interval = seconds / 2592000;
+            if (interval > 1) return Math.floor(interval) + " tháng trước";
+            interval = seconds / 86400;
+            if (interval > 1) return Math.floor(interval) + " ngày trước";
+            interval = seconds / 3600;
+            if (interval > 1) return Math.floor(interval) + " giờ trước";
+            interval = seconds / 60;
+            if (interval > 1) return Math.floor(interval) + " phút trước";
+            return 'vừa xong';
         }
 
         // --- Core Application Logic ---
@@ -199,7 +228,7 @@
 
             initializeMap();
             startWatchingLocation();
-            startListeningToJourneys();
+            startListeningToOtherUsers();
         }
 
         function initializeMap() {
@@ -232,43 +261,14 @@
             const speedKmh = speedMs * 3.6;
 
             speedReadings.push(speedKmh);
-            if (speedReadings.length > SMOOTHING_FACTOR) speedReadings.shift(); 
+            if (speedReadings.length > SMOOTHING_FACTOR) {
+                speedReadings.shift(); 
+            }
+
             const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
             lastPosition = newPosition; 
             
             return smoothedSpeed;
-        }
-
-        /**
-         * UPDATED: Detects if a new journey should start, then updates the appropriate journey doc.
-         */
-        async function handleLocationUpdate(position) {
-            locationStatus.textContent = 'Đang hoạt động';
-            const { latitude, longitude } = position.coords;
-            const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
-
-            latDisplay.textContent = latitude.toFixed(5);
-            lngDisplay.textContent = longitude.toFixed(5);
-            speedDisplay.textContent = calculatedSpeedKmh.toFixed(1);
-
-            const timeSinceLastUpdate = lastPosition ? (position.timestamp - lastPosition.timestamp) / 1000 / 60 : 0;
-            
-            if (!currentJourneyId || timeSinceLastUpdate > JOURNEY_BREAK_THRESHOLD_MINUTES) {
-                await startNewJourney({ latitude, longitude, speedKmh: calculatedSpeedKmh });
-            } else {
-                await updateCurrentJourney({ latitude, longitude, speedKmh: calculatedSpeedKmh });
-            }
-
-            // Update user marker position
-            const latLng = [latitude, longitude];
-            if (userMarker) {
-                userMarker.setLatLng(latLng);
-            } else {
-                userMarker = L.marker(latLng, {
-                    icon: L.divIcon({ className: 'current-user-marker', iconSize: [28, 28], iconAnchor: [14, 14] })
-                }).addTo(map);
-                map.setView(latLng, 15);
-            }
         }
 
         function startWatchingLocation() {
@@ -277,7 +277,19 @@
                 showNotification('Trình duyệt của bạn không hỗ trợ Geolocation.');
                 return;
             }
-            navigator.geolocation.watchPosition(handleLocationUpdate, 
+
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    locationStatus.textContent = 'Đang hoạt động';
+                    const { latitude, longitude } = position.coords;
+                    const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
+
+                    latDisplay.textContent = latitude.toFixed(5);
+                    lngDisplay.textContent = longitude.toFixed(5);
+                    speedDisplay.textContent = calculatedSpeedKmh.toFixed(1);
+                    
+                    updateLocationInFirestore({ latitude, longitude, speedKmh: calculatedSpeedKmh });
+                },
                 (error) => {
                     let message = 'Lỗi không xác định';
                     if (error.code === error.PERMISSION_DENIED) message = 'Bạn đã từ chối quyền vị trí.';
@@ -288,119 +300,182 @@
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         }
-
-        /**
-         * NEW: Creates a new journey document in the user's 'journeys' subcollection.
-         */
-        async function startNewJourney({ latitude, longitude, speedKmh }) {
+        
+        async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser) return;
-            const journeysCollectionRef = collection(db, USER_COLLECTION, currentUser.uid, "journeys");
+            
+            const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
             const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                const docRef = await addDoc(journeysCollectionRef, {
-                    startTime: serverTimestamp(),
-                    lastUpdateTime: serverTimestamp(),
-                    path: [newPoint],
-                    speeds: [speedKmh]
-                });
-                currentJourneyId = docRef.id;
-                showNotification("Một hành trình mới đã bắt đầu!");
-            } catch (error) {
-                console.error("Error starting new journey: ", error);
-            }
-        }
-
-        /**
-         * NEW: Updates the currently active journey document.
-         */
-        async function updateCurrentJourney({ latitude, longitude, speedKmh }) {
-            if (!db || !currentUser || !currentJourneyId) return;
-            const journeyDocRef = doc(db, USER_COLLECTION, currentUser.uid, "journeys", currentJourneyId);
-            const newPoint = { lat: latitude, lng: longitude };
-
-            try {
-                await updateDoc(journeyDocRef, {
-                    lastUpdateTime: serverTimestamp(),
-                    path: arrayUnion(newPoint),
-                    speeds: arrayUnion(speedKmh)
+                await updateDoc(userDocRef, {
+                    name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
+                    timestamp: serverTimestamp(),
+                    lastSpeed: speedKmh, 
+                    path: arrayUnion(newPoint)
                 });
             } catch (error) {
-                console.error("Error updating journey:", error);
+                console.error("Error updating document:", error);
+                showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
         }
+        
+        function startListeningToOtherUsers() {
+            const usersCollection = collection(db, FIRESTORE_COLLECTION);
 
-        /**
-         * NEW: Listens to the user's journeys subcollection and draws them on the map.
-         */
-        function startListeningToJourneys() {
-            if (!db || !currentUser) return;
-            const journeysCollectionRef = collection(db, USER_COLLECTION, currentUser.uid, "journeys");
-            // Fetch journeys ordered by start time to display them logically
-            const q = query(journeysCollectionRef, orderBy("startTime", "desc"));
+            onSnapshot(usersCollection, (snapshot) => {
+                const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const activeUserIds = new Set(activeUsers.map(u => u.id));
 
-            onSnapshot(q, (snapshot) => {
-                journeysList.innerHTML = '';
-                if (snapshot.empty) {
-                    journeysList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có hành trình nào.</li>';
-                }
+                activeUsers.forEach(user => updateUserOnMap(user.id, user));
 
-                snapshot.forEach(doc => {
-                    const journeyData = doc.data();
-                    const journeyId = doc.id;
-                    
-                    // Update the list of journeys in the UI
-                    updateJourneysListUI(journeyId, journeyData);
-                    
-                    // Update the polyline on the map
-                    drawJourneyPolyline(journeyId, journeyData);
+                Object.keys(mapObjects).forEach(userId => {
+                    if (!activeUserIds.has(userId)) {
+                        removeUserFromMap(userId);
+                    }
                 });
+                updateUserListUI(activeUsers);
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}.`);
             });
         }
         
         /**
-         * NEW: Draws a single journey's polyline on the map.
+         * UPDATED: Creates or updates a user's marker and polyline with online/offline styling.
+         * @param {string} userId - The ID of the user.
+         * @param {object} userData - The user's data from Firestore.
          */
-        function drawJourneyPolyline(journeyId, journeyData) {
-            const path = journeyData.path.map(p => [p.lat, p.lng]);
-            const isCurrent = journeyId === currentJourneyId;
+        function updateUserOnMap(userId, userData) {
+            if (!map || !userData.path || userData.path.length === 0) return;
+
+            const path = userData.path;
+            const lastPoint = path[path.length - 1];
+            const latLng = [lastPoint.lat, lastPoint.lng];
+            const isCurrentUser = userId === currentUser.uid;
+            
+            const now = Date.now();
+            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+            
+            if (!mapObjects[userId]) {
+                mapObjects[userId] = { marker: null, polyline: null };
+            }
+            
+            const userMapObject = mapObjects[userId];
+
+            // --- Marker Logic ---
+            const markerIcon = L.divIcon({
+                className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
+                html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
+                iconSize: isCurrentUser ? [28, 28] : [24, 24],
+                iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
+            });
+
+            if (userMapObject.marker) {
+                userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
+            } else {
+                userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
+                if (isCurrentUser && path.length === 1) {
+                    map.setView(latLng, 15);
+                }
+            }
+            
+            const popupContent = `
+                <div class="font-sans">
+                    <strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>
+                    Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h
+                    ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}
+                </div>`;
+            userMapObject.marker.bindPopup(popupContent);
+
+            // --- Polyline Logic (with online/offline styles) ---
+            const polylinePoints = path.map(p => [p.lat, p.lng]);
+            const onlineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
+            const offlineColor = '#9ca3af'; // gray-400
 
             const polylineOptions = { 
-                color: isCurrent ? '#22c55e' : '#9ca3af',
+                color: isOnline ? onlineColor : offlineColor,
                 weight: 4,
-                opacity: isCurrent ? 0.8 : 0.6,
-                dashArray: isCurrent ? null : '5, 10'
+                opacity: isOnline ? 0.8 : 0.6,
+                dashArray: isOnline ? null : '5, 10'
             };
-
-            if (polylines[journeyId]) {
-                polylines[journeyId].setLatLngs(path).setStyle(polylineOptions);
+            
+            if (userMapObject.polyline) {
+                userMapObject.polyline.setLatLngs(polylinePoints);
+                userMapObject.polyline.setStyle(polylineOptions);
             } else {
-                polylines[journeyId] = L.polyline(path, polylineOptions).addTo(map);
+                userMapObject.polyline = L.polyline(polylinePoints, polylineOptions).addTo(map);
+            }
+        }
+        
+        function removeUserFromMap(userId) {
+            if (mapObjects[userId]) {
+                const { marker, polyline } = mapObjects[userId];
+                if (marker) map.removeLayer(marker);
+                if (polyline) map.removeLayer(polyline);
+                delete mapObjects[userId];
             }
         }
 
         /**
-         * NEW: Updates the sidebar list with journey information.
+         * UPDATED: Updates the list of users with online/offline status indicators.
+         * @param {Array} users - An array of active user objects.
          */
-        function updateJourneysListUI(journeyId, journeyData) {
-             const li = document.createElement('li');
-             const isCurrent = journeyId === currentJourneyId;
-             const startTime = journeyData.startTime?.toDate();
-             const avgSpeed = journeyData.speeds && journeyData.speeds.length > 0 ? journeyData.speeds.reduce((a,b) => a+b, 0) / journeyData.speeds.length : 0;
+        function updateUserListUI(users) {
+            userList.innerHTML = '';
+            const now = Date.now();
 
-             li.className = `p-2 rounded-md transition ${isCurrent ? 'bg-blue-50' : 'hover:bg-gray-100'} cursor-pointer`;
-             li.onclick = () => {
-                if (polylines[journeyId]) {
-                    map.fitBounds(polylines[journeyId].getBounds());
-                }
-             };
+            // Sort users: current user first, then by online status, then by name
+            const sortedUsers = users.sort((a, b) => {
+                if (a.id === currentUser.uid) return -1;
+                if (b.id === currentUser.uid) return 1;
 
-             li.innerHTML = `
-                <p class="font-semibold text-gray-800">Hành trình ${startTime ? startTime.toLocaleTimeString('vi-VN') : ''}</p>
-                <p class="text-xs text-gray-500">${startTime ? startTime.toLocaleDateString('vi-VN') : 'Đang tải...'}</p>
-                <p class="text-xs text-gray-500">Tốc độ trung bình: ${avgSpeed.toFixed(1)} km/h</p>
-             `;
-             journeysList.appendChild(li);
+                const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+                const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
+                if (aIsOnline && !bIsOnline) return -1; // Online users first
+                if (!aIsOnline && bIsOnline) return 1;
+                
+                return (a.name || '').localeCompare(b.name || ''); // Then sort by name
+            });
+            
+            if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
+                userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có người dùng nào khác.</li>';
+                return;
+            }
+
+            sortedUsers.forEach(user => {
+                const isCurrentUser = user.id === currentUser.uid;
+                const isOnline = user.timestamp ? (now - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
+                const li = document.createElement('li');
+                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''} cursor-pointer`;
+                li.onclick = () => {
+                    if (mapObjects[user.id] && mapObjects[user.id].marker) {
+                        map.setView(mapObjects[user.id].marker.getLatLng(), 16);
+                        mapObjects[user.id].marker.openPopup();
+                    }
+                };
+
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                const statusText = isOnline ? `Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h` : `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+
+                li.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
+                                ${(user.name || 'A').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                            <p class="text-xs text-gray-500">${statusText}</p>
+                        </div>
+                    </div>
+                `;
+                userList.appendChild(li);
+            });
         }
         
         // --- Event Listeners ---
@@ -415,12 +490,12 @@
             });
         });
 
-        saveNameButton.addEventListener('click', async () => {
+        saveNameButton.addEventListener('click', () => {
             const newName = deviceNameInput.value.trim();
             if (newName) {
                 localStorage.setItem('deviceName', newName);
-                const userDocRef = doc(db, USER_COLLECTION, currentUser.uid);
-                await setDoc(userDocRef, { name: newName }, { merge: true });
+                const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
+                updateDoc(userDocRef, { name: newName });
                 showNotification(`Tên đã được lưu thành "${newName}".`);
             } else {
                  showNotification('Vui lòng nhập tên hợp lệ.');
@@ -438,18 +513,20 @@
                     if (user) {
                         currentUser = user;
                         
-                        // Ensure user document exists
-                        const userDocRef = doc(db, USER_COLLECTION, currentUser.uid);
+                        const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
                         const docSnap = await getDoc(userDocRef);
                         if (!docSnap.exists()) {
-                            await setDoc(userDocRef, { 
-                                name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
-                                created: serverTimestamp()
-                            });
-                        } else {
-                            // Load saved name
-                            const userData = docSnap.data();
-                            if(userData.name) deviceNameInput.value = userData.name;
+                            try {
+                                await setDoc(userDocRef, {
+                                    name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
+                                    timestamp: serverTimestamp(),
+                                    path: [] 
+                                });
+                            } catch (error) {
+                                console.error("Error creating user document:", error);
+                                showNotification("Không thể tạo hồ sơ người dùng.");
+                                return;
+                            }
                         }
 
                         authStatus.textContent = 'Xác thực thành công!';
@@ -463,8 +540,7 @@
                         startTrackingButton.disabled = false;
                     }
                 });
-            } catch (error)
-            {
+            } catch (error) {
                 console.error("Firebase initialization failed:", error);
                 authStatus.textContent = "Lỗi khởi tạo. Kiểm tra console.";
                 showNotification(`Không thể khởi tạo ứng dụng: ${error.message}`);
