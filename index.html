@@ -65,10 +65,10 @@
     <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
         <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Chào mừng bạn!</h1>
         <p class="text-lg text-gray-600 mb-8 max-w-2xl">
-            Đây là một ứng dụng theo dõi vị trí thời gian thực. Nhấn nút bên dưới để bắt đầu chia sẻ vị trí của bạn và xem vị trí của những người dùng khác trong cùng một phiên.
+            Đây là một ứng dụng theo dõi vị trí thời gian thực. Nhấn nút bên dưới để bắt đầu ghi lại và chia sẻ hành trình của bạn.
         </p>
         <button id="start-tracking-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg">
-            Bắt đầu Theo dõi
+            Bắt đầu Ghi Hành Trình
         </button>
         <p id="auth-status" class="mt-4 text-gray-500 text-sm">Đang chờ xác thực...</p>
     </div>
@@ -109,7 +109,6 @@
                 <!-- Active Users List -->
                 <div class="flex flex-col min-h-0">
                     <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
-                    <!-- Layout changed: Added min/max height for better mobile display -->
                     <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-y-auto min-h-[250px]">
                         <ul id="user-list" class="space-y-3">
                            <!-- JS will populate this list -->
@@ -120,7 +119,6 @@
             </div>
 
             <!-- Right Panel: Map -->
-            <!-- Layout changed: Set specific height for mobile, fill for desktop -->
             <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 h-[65vh] md:h-auto">
                 <div id="map"></div>
             </div>
@@ -143,12 +141,11 @@
         // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        // NEW: Import functions needed for persistent paths
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, deleteDoc, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
-        // These variables are expected to be provided by the environment (e.g., Canvas).
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
-        // Updated Firebase configuration as requested
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
             authDomain: "ailocal-86167.firebaseapp.com",
@@ -180,8 +177,7 @@
         let db, auth;
         let currentUser = null;
         let map = null;
-        let userMarkers = {}; // { userId: leafletMarker }
-        // CORRECTED: The collection path must have an odd number of segments.
+        let mapObjects = {}; // { userId: { marker, polyline, points } }
         const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
 
         // --- Utility Functions ---
@@ -196,12 +192,10 @@
          * Initializes the entire application after successful authentication.
          */
         function initializeAppLogic() {
-            // Update UI
             appIdDisplay.textContent = appId;
             userIdDisplay.textContent = currentUser.uid;
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
             
-            // Show the main app and hide the auth screen
             authScreen.classList.add('hidden');
             appScreen.classList.remove('hidden');
 
@@ -209,8 +203,8 @@
             startWatchingLocation();
             startListeningToOtherUsers();
             
-            // Set up a process to remove inactive users from Firestore
-            setupInactiveUserCleanup();
+            // NOTE: The automatic cleanup on exit is now disabled to allow paths to persist.
+            // setupInactiveUserCleanup(); 
         }
 
         /**
@@ -218,17 +212,11 @@
          */
         function initializeMap() {
             if (map) return;
-            map = L.map(mapElement, {
-                zoomControl: false // We can add custom zoom controls if needed
-            }).setView([21.0285, 105.8542], 13); // Default to Hanoi
-
-            // Switched to a light-themed map
+            map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19
             }).addTo(map);
-            
-            // Add zoom controls to the bottom right
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
@@ -238,7 +226,6 @@
         function startWatchingLocation() {
             if (!navigator.geolocation) {
                 locationStatus.textContent = 'Trình duyệt không hỗ trợ';
-                locationStatus.classList.replace('text-yellow-600', 'text-red-600');
                 showNotification('Trình duyệt của bạn không hỗ trợ Geolocation.');
                 return;
             }
@@ -246,28 +233,20 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     locationStatus.textContent = 'Đang hoạt động';
-                    locationStatus.classList.remove('text-yellow-600', 'text-red-600');
-                    locationStatus.classList.add('text-green-600');
-
                     const { latitude, longitude, speed } = position.coords;
                     const speedKmh = (speed || 0) * 3.6;
 
-                    // Update UI
                     latDisplay.textContent = latitude.toFixed(5);
                     lngDisplay.textContent = longitude.toFixed(5);
                     speedDisplay.textContent = speedKmh.toFixed(1);
                     
-                    // Send data to Firestore
                     updateLocationInFirestore({ latitude, longitude, speedKmh });
                 },
                 (error) => {
                     let message = 'Lỗi không xác định';
                     if (error.code === error.PERMISSION_DENIED) message = 'Bạn đã từ chối quyền vị trí.';
                     else if (error.code === error.POSITION_UNAVAILABLE) message = 'Vị trí không khả dụng.';
-                    
                     locationStatus.textContent = message;
-                    locationStatus.classList.remove('text-yellow-600', 'text-green-600');
-                    locationStatus.classList.add('text-red-600');
                     showNotification(message);
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -275,26 +254,26 @@
         }
         
         /**
-         * Sends the user's location data to Firestore.
+         * NEW: Appends the user's latest location to the path array in Firestore.
          * @param {object} locationData - Contains latitude, longitude, and speedKmh.
          */
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser) return;
             
-            const deviceName = deviceNameInput.value.trim() || 'Người dùng ẩn danh';
             const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
+            const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                await setDoc(userDocRef, {
-                    name: deviceName,
-                    lat: latitude,
-                    lng: longitude,
-                    speed: speedKmh,
-                    timestamp: serverTimestamp() // Use server time for consistency
+                // Atomically add a new location to the "path" array field.
+                await updateDoc(userDocRef, {
+                    name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
+                    timestamp: serverTimestamp(),
+                    lastSpeed: speedKmh, // Store last known speed
+                    path: arrayUnion(newPoint)
                 });
             } catch (error) {
-                console.error("Error writing to Firestore: ", error);
-                showNotification(`Lỗi kết nối với máy chủ: ${error.message}`);
+                console.error("Error updating document:", error);
+                showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
         }
         
@@ -305,45 +284,43 @@
             const usersCollection = collection(db, FIRESTORE_COLLECTION);
 
             onSnapshot(usersCollection, (snapshot) => {
-                const activeUsers = [];
-                snapshot.forEach(doc => {
-                    const userData = doc.data();
-                    const userId = doc.id;
-                    
-                    // Add to the list of active users for the UI
-                    activeUsers.push({ id: userId, ...userData });
+                const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const activeUserIds = new Set(activeUsers.map(u => u.id));
 
-                    // Update the user's marker on the map
-                    updateUserMarker(userId, userData);
-                });
+                activeUsers.forEach(user => updateUserOnMap(user.id, user));
 
-                // Update the user list UI
-                updateUserListUI(activeUsers);
-                
-                // Remove markers for users who are no longer in the snapshot
-                Object.keys(userMarkers).forEach(markerUserId => {
-                    if (!snapshot.docs.some(doc => doc.id === markerUserId)) {
-                        removeUserMarker(markerUserId);
+                Object.keys(mapObjects).forEach(userId => {
+                    if (!activeUserIds.has(userId)) {
+                        removeUserFromMap(userId);
                     }
                 });
+                updateUserListUI(activeUsers);
             }, (error) => {
-                // Add error handling for the snapshot listener
                 console.error("Firestore snapshot error:", error);
-                showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}. Hãy kiểm tra quy tắc bảo mật Firestore.`);
+                showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}.`);
             });
         }
         
         /**
-         * Creates or updates a user's marker on the map.
+         * NEW: Creates or updates a user's marker and ENTIRE polyline from the path data.
          * @param {string} userId - The ID of the user.
-         * @param {object} userData - The user's data from Firestore.
+         * @param {object} userData - The user's data from Firestore, including the `path` array.
          */
-        function updateUserMarker(userId, userData) {
-            if (!map || !userData.lat || !userData.lng) return;
+        function updateUserOnMap(userId, userData) {
+            if (!map || !userData.path || userData.path.length === 0) return;
 
-            const latLng = [userData.lat, userData.lng];
+            const path = userData.path;
+            const lastPoint = path[path.length - 1];
+            const latLng = [lastPoint.lat, lastPoint.lng];
             const isCurrentUser = userId === currentUser.uid;
             
+            if (!mapObjects[userId]) {
+                mapObjects[userId] = { marker: null, polyline: null };
+            }
+            
+            const userMapObject = mapObjects[userId];
+
+            // --- Marker Logic ---
             const markerIcon = L.divIcon({
                 className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
                 html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
@@ -351,34 +328,47 @@
                 iconAnchor: isCurrentUser ? [14, 14] : [12, 12],
             });
 
-            if (userMarkers[userId]) {
-                // Marker exists, update its position and popup
-                userMarkers[userId].setLatLng(latLng).setIcon(markerIcon);
+            if (userMapObject.marker) {
+                userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
             } else {
-                // Marker doesn't exist, create a new one
-                userMarkers[userId] = L.marker(latLng, { icon: markerIcon }).addTo(map);
-                if (isCurrentUser) {
-                    map.setView(latLng, 15); // Center map on current user initially
+                userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
+                if (isCurrentUser && path.length === 1) {
+                    map.setView(latLng, 15);
                 }
             }
             
             const popupContent = `
                 <div class="font-sans">
                     <strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>
-                    Tốc độ: ${userData.speed?.toFixed(1) || 0} km/h
+                    Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h
                     ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}
                 </div>`;
-            userMarkers[userId].bindPopup(popupContent);
+            userMapObject.marker.bindPopup(popupContent);
+
+            // --- Polyline Logic ---
+            const polylinePoints = path.map(p => [p.lat, p.lng]);
+            const polylineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
+            if (userMapObject.polyline) {
+                userMapObject.polyline.setLatLngs(polylinePoints);
+            } else {
+                userMapObject.polyline = L.polyline(polylinePoints, { 
+                    color: polylineColor,
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+            }
         }
         
         /**
-         * Removes a user's marker from the map.
+         * Removes a user's marker and polyline from the map.
          * @param {string} userId - The ID of the user to remove.
          */
-        function removeUserMarker(userId) {
-            if (userMarkers[userId]) {
-                map.removeLayer(userMarkers[userId]);
-                delete userMarkers[userId];
+        function removeUserFromMap(userId) {
+            if (mapObjects[userId]) {
+                const { marker, polyline } = mapObjects[userId];
+                if (marker) map.removeLayer(marker);
+                if (polyline) map.removeLayer(polyline);
+                delete mapObjects[userId];
             }
         }
 
@@ -387,11 +377,11 @@
          * @param {Array} users - An array of active user objects.
          */
         function updateUserListUI(users) {
-            userList.innerHTML = ''; // Clear the list
+            userList.innerHTML = '';
             const sortedUsers = users.sort((a, b) => {
-                if (a.id === currentUser.uid) return -1; // Current user always first
+                if (a.id === currentUser.uid) return -1;
                 if (b.id === currentUser.uid) return 1;
-                return (a.name || '').localeCompare(b.name || ''); // Sort others by name
+                return (a.name || '').localeCompare(b.name || '');
             });
             
             if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
@@ -404,9 +394,9 @@
                 const li = document.createElement('li');
                 li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} cursor-pointer`;
                 li.onclick = () => {
-                    if (userMarkers[user.id]) {
-                        map.setView(userMarkers[user.id].getLatLng(), 16);
-                        userMarkers[user.id].openPopup();
+                    if (mapObjects[user.id] && mapObjects[user.id].marker) {
+                        map.setView(mapObjects[user.id].marker.getLatLng(), 16);
+                        mapObjects[user.id].marker.openPopup();
                     }
                 };
 
@@ -417,7 +407,7 @@
                         </div>
                         <div>
                             <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
-                            <p class="text-xs text-gray-500">Tốc độ: ${user.speed?.toFixed(1) || 0} km/h</p>
+                            <p class="text-xs text-gray-500">Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h</p>
                         </div>
                     </div>
                 `;
@@ -426,17 +416,17 @@
         }
         
         /**
-         * Sets up a listener to remove the user's data from Firestore when they close the tab.
+         * This function is now disabled to allow paths to persist in Firestore.
          */
         function setupInactiveUserCleanup() {
+            /*
             window.addEventListener('beforeunload', async (e) => {
                 if (db && currentUser) {
                     const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
-                    // This is not guaranteed to run, but it's the best we can do.
-                    // For a robust solution, a server-side function would be needed to clean up stale documents.
                     await deleteDoc(userDocRef);
                 }
             });
+            */
         }
 
         // --- Event Listeners ---
@@ -455,12 +445,9 @@
             const newName = deviceNameInput.value.trim();
             if (newName) {
                 localStorage.setItem('deviceName', newName);
+                const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
+                updateDoc(userDocRef, { name: newName });
                 showNotification(`Tên đã được lưu thành "${newName}".`);
-                // Trigger an immediate update to Firestore with the new name
-                 navigator.geolocation.getCurrentPosition(position => {
-                     const { latitude, longitude, speed } = position.coords;
-                     updateLocationInFirestore({ latitude, longitude, speedKmh: (speed || 0) * 3.6 });
-                 });
             } else {
                  showNotification('Vui lòng nhập tên hợp lệ.');
             }
@@ -473,15 +460,32 @@
                 db = getFirestore(firebaseApp);
                 auth = getAuth(firebaseApp);
 
-                onAuthStateChanged(auth, (user) => {
+                // NEW: Logic moved inside onAuthStateChanged to ensure document exists before starting app
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
-                        // User is signed in.
                         currentUser = user;
+                        
+                        // Check if user document exists, create if not
+                        const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
+                        const docSnap = await getDoc(userDocRef);
+                        if (!docSnap.exists()) {
+                            try {
+                                await setDoc(userDocRef, {
+                                    name: localStorage.getItem('deviceName') || 'Người dùng ẩn danh',
+                                    timestamp: serverTimestamp(),
+                                    path: [] // Initialize with an empty path
+                                });
+                            } catch (error) {
+                                console.error("Error creating user document:", error);
+                                showNotification("Không thể tạo hồ sơ người dùng.");
+                                return;
+                            }
+                        }
+
                         authStatus.textContent = 'Xác thực thành công!';
-                        if(!appScreen.classList.contains('hidden')) return; // Already initialized
+                        if(!appScreen.classList.contains('hidden')) return;
                         initializeAppLogic();
                     } else {
-                        // User is signed out.
                         currentUser = null;
                         authScreen.classList.remove('hidden');
                         appScreen.classList.add('hidden');
@@ -496,7 +500,6 @@
             }
         }
         
-        // Run the app
         main();
         
     </script>
