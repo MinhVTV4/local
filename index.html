@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v4.5 - Tham gia bằng liên kết</title>
+    <title>Theo Dõi Vị Trí v4.6 - Sửa lỗi Quản lý Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -126,9 +126,10 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="module">
+        // SỬA LỖI: Thêm deleteDoc vào import
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove, orderBy } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         const firebaseConfig = {
              apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
@@ -246,7 +247,6 @@
             }
         }
         
-        // NÂNG CẤP: Logic tham gia nhóm, trả về true/false
         async function joinGroupLogic(groupCode) {
             if (!groupCode) {
                 showNotification("Vui lòng nhập mã mời.");
@@ -294,16 +294,25 @@
             }
         }
         
+        // SỬA LỖI: Xóa cả location document của thành viên
         window.removeUserFromGroup = async (userIdToRemove, userName) => {
             if (!currentGroup || currentUser.uid !== currentGroup.ownerId) {
                 showNotification("Chỉ chủ nhóm mới có quyền xóa thành viên.");
                 return;
             }
             if(confirm(`Bạn có chắc chắn muốn xóa "${userName}" khỏi nhóm không?`)) {
-                await updateDoc(doc(db, "groups", currentGroup.id), {
-                    members: arrayRemove(userIdToRemove)
-                });
-                showNotification(`Đã xóa "${userName}" khỏi nhóm.`);
+                try {
+                    const groupDocRef = doc(db, "groups", currentGroup.id);
+                    const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, userIdToRemove);
+
+                    await updateDoc(groupDocRef, { members: arrayRemove(userIdToRemove) });
+                    await deleteDoc(locationDocRef); // Xóa tài liệu vị trí
+
+                    showNotification(`Đã xóa "${userName}" khỏi nhóm.`);
+                } catch (error) {
+                    console.error("Lỗi khi xóa thành viên:", error);
+                    showNotification("Có lỗi xảy ra, không thể xóa thành viên.");
+                }
             }
         }
 
@@ -559,4 +568,4 @@
         main();
     </script>
 </body>
-</ht
+</html>
