@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v4.6 - Sửa lỗi Quản lý Nhóm</title>
+    <title>Theo Dõi Vị Trí v4.7 - Đặt Tên Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -47,6 +47,19 @@
         </div>
     </div>
     
+    <!-- Create Group Modal -->
+    <div id="create-group-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-4">Tạo Nhóm Mới</h2>
+            <p class="text-gray-600 mb-4">Đặt một tên dễ nhớ cho nhóm của bạn.</p>
+            <input type="text" id="new-group-name-input" placeholder="VD: Gia đình đi nghỉ mát" class="w-full text-center bg-gray-100 border border-gray-300 rounded-md px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div class="mt-6 flex gap-4">
+                <button id="cancel-create-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold px-6 py-2 rounded-md">Hủy</button>
+                <button id="confirm-create-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Tạo Nhóm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Join Group Modal -->
     <div id="join-group-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
@@ -67,18 +80,16 @@
             <!-- Left Panel -->
             <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col md:overflow-y-auto">
                 <div>
-                    <h2 class="text-2xl font-bold mb-2 text-gray-900">Bảng điều khiển</h2>
+                     <div class="flex items-center justify-between mb-2">
+                        <h2 id="group-name-display" class="text-2xl font-bold text-gray-900 truncate"></h2>
+                        <button id="rename-group-btn" class="hidden text-gray-500 hover:text-blue-600 p-1" title="Đổi tên nhóm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+
                     <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg mb-4">
-                        <p class="text-sm text-blue-800">Mời bạn bè bằng liên kết:</p>
-                        <div class="flex items-center gap-2">
-                           <span id="group-code-display" class="font-mono text-xl font-bold text-blue-900"></span>
-                           <button id="copy-code-btn" title="Sao chép liên kết mời" class="text-blue-600 hover:text-blue-800">
-                               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M8 4a1 1 0 011-1h6a1 1 0 110 2H9a1 1 0 01-1-1zM6 8a1 1 0 00-1 1v6a1 1 0 102 0V9a1 1 0 00-1-1z" />
-                                <path d="M12 2.25A9.75 9.75 0 002.25 12c0 4.142 2.683 7.625 6.25 8.9V12.75A4.25 4.25 0 0112.75 8.5H18a1 1 0 011 1v2.871A9.742 9.742 0 0021.75 12 9.75 9.75 0 0012 2.25z" />
-                               </svg>
-                           </button>
-                        </div>
+                        <p class="text-sm text-blue-800">Mã mời: <span id="group-code-display" class="font-mono font-semibold text-blue-900"></span></p>
+                         <button id="copy-link-btn" class="text-sm text-blue-600 hover:text-blue-800 font-semibold mt-1">Sao chép liên kết mời</button>
                     </div>
 
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
@@ -126,7 +137,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="module">
-        // SỬA LỖI: Thêm deleteDoc vào import
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, getDoc, addDoc, getDocs, query, where, arrayUnion, arrayRemove, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
@@ -146,13 +156,19 @@
         const authStatus = document.getElementById('auth-status');
         const createGroupBtn = document.getElementById('create-group-btn');
         const joinGroupBtn = document.getElementById('join-group-btn');
+        const createGroupModal = document.getElementById('create-group-modal');
+        const newGroupNameInput = document.getElementById('new-group-name-input');
+        const cancelCreateBtn = document.getElementById('cancel-create-btn');
+        const confirmCreateBtn = document.getElementById('confirm-create-btn');
         const joinGroupModal = document.getElementById('join-group-modal');
         const groupCodeInput = document.getElementById('group-code-input');
         const cancelJoinBtn = document.getElementById('cancel-join-btn');
         const confirmJoinBtn = document.getElementById('confirm-join-btn');
         const mapElement = document.getElementById('map');
+        const groupNameDisplay = document.getElementById('group-name-display');
+        const renameGroupBtn = document.getElementById('rename-group-btn');
         const groupCodeDisplay = document.getElementById('group-code-display');
-        const copyCodeBtn = document.getElementById('copy-code-btn');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
         const userIdDisplay = document.getElementById('user-id-display');
         const locationStatus = document.getElementById('location-status');
         const speedDisplay = document.getElementById('speed-display');
@@ -169,7 +185,7 @@
         // --- Global State ---
         let db, auth;
         let currentUser = null;
-        let currentGroup = null; // now {id, code, ownerId}
+        let currentGroup = null; // now {id, code, ownerId, name}
         let map = null;
         let mapObjects = {};
         let groupUnsubscribe = null;
@@ -207,14 +223,22 @@
         
         // --- UI Transitions ---
         function showAppScreen() { authScreen.classList.add('hidden'); appScreen.classList.remove('hidden'); }
-        function showAuthScreen() { appScreen.classList.add('hidden'); authScreen.classList.remove('hidden'); joinGroupModal.classList.add('hidden'); }
+        function showAuthScreen() { appScreen.classList.add('hidden'); authScreen.classList.remove('hidden'); joinGroupModal.classList.add('hidden'); createGroupModal.classList.add('hidden'); }
         
         // --- Main Application Logic ---
         function initializeAppForGroup() {
             showAppScreen();
             userIdDisplay.textContent = currentUser.uid.substring(0, 8) + '...';
             groupCodeDisplay.textContent = currentGroup.code;
+            groupNameDisplay.textContent = currentGroup.name;
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
+            
+            if (currentUser.uid === currentGroup.ownerId) {
+                renameGroupBtn.classList.remove('hidden');
+            } else {
+                renameGroupBtn.classList.add('hidden');
+            }
+
             if (!map) initializeMap();
             startWatchingLocation();
             startListeningToGroupChanges();
@@ -228,22 +252,32 @@
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
+        
+        async function createGroup(groupName) {
+            if (!groupName) {
+                showNotification("Vui lòng đặt tên cho nhóm.");
+                return;
+            }
+            const originalText = confirmCreateBtn.textContent;
+            setButtonLoadingState(confirmCreateBtn, true, originalText, 'Đang tạo...');
 
-        async function createGroup() {
-            const originalText = createGroupBtn.textContent;
-            setButtonLoadingState(createGroupBtn, true, originalText, 'Đang tạo...');
             const groupCode = `NHOM-${Math.floor(1000 + Math.random() * 9000)}`;
             try {
                 const newGroupRef = await addDoc(collection(db, "groups"), {
-                    ownerId: currentUser.uid, code: groupCode, members: [currentUser.uid], createdAt: serverTimestamp()
+                    name: groupName,
+                    ownerId: currentUser.uid, 
+                    code: groupCode, 
+                    members: [currentUser.uid], 
+                    createdAt: serverTimestamp()
                 });
-                currentGroup = { id: newGroupRef.id, code: groupCode, ownerId: currentUser.uid };
+                currentGroup = { id: newGroupRef.id, name: groupName, code: groupCode, ownerId: currentUser.uid };
                 localStorage.setItem('groupId', currentGroup.id);
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
+                createGroupModal.classList.add('hidden');
             } catch (error) {
                 console.error("Lỗi khi tạo nhóm:", error);
-                setButtonLoadingState(createGroupBtn, false, originalText);
+                setButtonLoadingState(confirmCreateBtn, false, originalText);
             }
         }
         
@@ -261,7 +295,7 @@
                 }
                 const groupDoc = querySnapshot.docs[0];
                 const groupData = groupDoc.data();
-                currentGroup = { id: groupDoc.id, code: groupData.code, ownerId: groupData.ownerId };
+                currentGroup = { id: groupDoc.id, name: groupData.name, code: groupData.code, ownerId: groupData.ownerId };
                 await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayUnion(currentUser.uid) });
                 localStorage.setItem('groupId', currentGroup.id);
                 await ensureUserLocationDocExists();
@@ -294,24 +328,30 @@
             }
         }
         
-        // SỬA LỖI: Xóa cả location document của thành viên
         window.removeUserFromGroup = async (userIdToRemove, userName) => {
-            if (!currentGroup || currentUser.uid !== currentGroup.ownerId) {
-                showNotification("Chỉ chủ nhóm mới có quyền xóa thành viên.");
-                return;
-            }
+            if (!currentGroup || currentUser.uid !== currentGroup.ownerId) return;
             if(confirm(`Bạn có chắc chắn muốn xóa "${userName}" khỏi nhóm không?`)) {
                 try {
-                    const groupDocRef = doc(db, "groups", currentGroup.id);
-                    const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, userIdToRemove);
-
-                    await updateDoc(groupDocRef, { members: arrayRemove(userIdToRemove) });
-                    await deleteDoc(locationDocRef); // Xóa tài liệu vị trí
-
+                    await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayRemove(userIdToRemove) });
+                    await deleteDoc(doc(db, `groups/${currentGroup.id}/locations`, userIdToRemove));
                     showNotification(`Đã xóa "${userName}" khỏi nhóm.`);
                 } catch (error) {
                     console.error("Lỗi khi xóa thành viên:", error);
                     showNotification("Có lỗi xảy ra, không thể xóa thành viên.");
+                }
+            }
+        }
+
+        async function renameGroup() {
+            if (!currentGroup || currentUser.uid !== currentGroup.ownerId) return;
+            const newName = prompt("Nhập tên nhóm mới:", currentGroup.name);
+            if (newName && newName.trim() !== '') {
+                try {
+                    await updateDoc(doc(db, "groups", currentGroup.id), { name: newName.trim() });
+                    showNotification("Đã đổi tên nhóm thành công.");
+                } catch (error) {
+                    console.error("Lỗi đổi tên nhóm:", error);
+                    showNotification("Không thể đổi tên nhóm.");
                 }
             }
         }
@@ -350,7 +390,6 @@
             }
         }
         
-        // --- Realtime Logic ---
         function startListeningToGroupChanges() {
             if (groupUnsubscribe) groupUnsubscribe();
             groupUnsubscribe = onSnapshot(doc(db, "groups", currentGroup.id), (groupDoc) => {
@@ -358,6 +397,8 @@
                 const groupData = groupDoc.data();
                 if (!groupData.members.includes(currentUser.uid)) { leaveGroup(true); return; }
                 currentGroup.ownerId = groupData.ownerId;
+                currentGroup.name = groupData.name;
+                groupNameDisplay.textContent = currentGroup.name;
                 startListeningToLocations();
             });
         }
@@ -492,7 +533,9 @@
         }
 
         // --- Event Listeners ---
-        createGroupBtn.addEventListener('click', createGroup);
+        createGroupBtn.addEventListener('click', () => createGroupModal.classList.remove('hidden'));
+        cancelCreateBtn.addEventListener('click', () => createGroupModal.classList.add('hidden'));
+        confirmCreateBtn.addEventListener('click', () => createGroup(newGroupNameInput.value));
         joinGroupBtn.addEventListener('click', () => joinGroupModal.classList.remove('hidden'));
         cancelJoinBtn.addEventListener('click', () => joinGroupModal.classList.add('hidden'));
         confirmJoinBtn.addEventListener('click', async () => {
@@ -506,6 +549,7 @@
             }
         });
         leaveGroupBtn.addEventListener('click', () => { if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); });
+        renameGroupBtn.addEventListener('click', renameGroup);
         saveNameButton.addEventListener('click', async () => {
             const newName = deviceNameInput.value.trim();
             if (newName && currentUser && currentGroup) {
@@ -514,7 +558,7 @@
                 showNotification(`Tên đã lưu thành "${newName}".`);
             }
         });
-        copyCodeBtn.addEventListener('click', () => {
+        copyLinkBtn.addEventListener('click', () => {
             const baseUrl = window.location.href.split('?')[0];
             const shareLink = `${baseUrl}?group_code=${currentGroup.code}`;
             navigator.clipboard.writeText(shareLink).then(() => showNotification(`Đã sao chép liên kết mời!`));
@@ -548,7 +592,7 @@
                                 const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
                                 if (groupDoc.exists()) {
                                     const groupData = groupDoc.data();
-                                    currentGroup = { id: storedGroupId, code: groupData.code, ownerId: groupData.ownerId };
+                                    currentGroup = { id: storedGroupId, name: groupData.name, code: groupData.code, ownerId: groupData.ownerId };
                                     initializeAppForGroup();
                                 } else { 
                                     localStorage.removeItem('groupId');
@@ -568,4 +612,4 @@
         main();
     </script>
 </body>
-</html>
+</ht
