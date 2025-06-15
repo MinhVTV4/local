@@ -55,12 +55,12 @@
         .leaflet-top, .leaflet-bottom { z-index: 2; }
     </style>
 </head>
-<body class="bg-gray-900 text-white antialiased">
+<body class="bg-gray-100 text-gray-800 antialiased">
 
     <!-- Authentication Screen: Shown on page load -->
-    <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Chào mừng bạn!</h1>
-        <p class="text-lg text-gray-400 mb-8 max-w-2xl">
+    <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Chào mừng bạn!</h1>
+        <p class="text-lg text-gray-600 mb-8 max-w-2xl">
             Đây là một ứng dụng theo dõi vị trí thời gian thực. Nhấn nút bên dưới để bắt đầu chia sẻ vị trí của bạn và xem vị trí của những người dùng khác trong cùng một phiên.
         </p>
         <button id="start-tracking-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg">
@@ -71,31 +71,32 @@
 
     <!-- Main Application Screen: Hidden until authenticated -->
     <div id="app-screen" class="hidden h-screen w-screen p-2 md:p-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 h-full">
+        <!-- Layout changed: Flex column on mobile, grid on medium screens and up -->
+        <div class="flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 h-full">
 
             <!-- Left Panel: Controls & Info -->
-            <div class="md:col-span-1 lg:col-span-1 bg-gray-800 rounded-xl p-4 flex flex-col h-full overflow-y-auto">
+            <div class="md:col-span-1 lg:col-span-1 bg-white rounded-xl shadow p-4 flex flex-col overflow-y-auto">
                 <div>
-                    <h2 class="text-2xl font-bold mb-1">Bảng điều khiển</h2>
-                    <p class="text-xs text-gray-400 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
-                    <p class="text-xs text-gray-400 mb-4 break-all">ID của bạn: <span id="user-id-display" class="font-mono"></span></p>
+                    <h2 class="text-2xl font-bold mb-1 text-gray-900">Bảng điều khiển</h2>
+                    <p class="text-xs text-gray-500 mb-4 break-all">ID Phiên: <span id="app-id-display" class="font-mono"></span></p>
+                    <p class="text-xs text-gray-500 mb-4 break-all">ID của bạn: <span id="user-id-display" class="font-mono"></span></p>
 
                     <!-- Your Info -->
-                    <div class="bg-gray-700/50 rounded-lg p-3 mb-4">
-                        <h3 class="font-semibold text-lg mb-2">Thông tin của bạn</h3>
-                        <div class="space-y-1 text-sm">
-                            <p>Trạng thái: <span id="location-status" class="font-medium text-yellow-400">Đang lấy vị trí...</span></p>
-                            <p>Vĩ độ: <span id="lat-display" class="font-mono text-green-400">N/A</span></p>
-                            <p>Kinh độ: <span id="lng-display" class="font-mono text-green-400">N/A</span></p>
-                            <p>Tốc độ: <span id="speed-display" class="font-mono text-green-400">0</span> km/h</p>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                        <h3 class="font-semibold text-lg mb-2 text-gray-800">Thông tin của bạn</h3>
+                        <div class="space-y-1 text-sm text-gray-700">
+                            <p>Trạng thái: <span id="location-status" class="font-medium text-yellow-600">Đang lấy vị trí...</span></p>
+                            <p>Vĩ độ: <span id="lat-display" class="font-mono text-green-600">N/A</span></p>
+                            <p>Kinh độ: <span id="lng-display" class="font-mono text-green-600">N/A</span></p>
+                            <p>Tốc độ: <span id="speed-display" class="font-mono text-green-600">0</span> km/h</p>
                         </div>
                     </div>
 
                     <!-- Set Device Name -->
-                    <div class="bg-gray-700/50 rounded-lg p-3 mb-4">
-                         <h3 class="font-semibold text-lg mb-2">Tên hiển thị</h3>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                         <h3 class="font-semibold text-lg mb-2 text-gray-800">Tên hiển thị</h3>
                          <div class="flex gap-2">
-                            <input type="text" id="device-name-input" placeholder="Nhập tên của bạn..." class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="device-name-input" placeholder="Nhập tên của bạn..." class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="save-name-button" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 rounded-md text-sm transition">Lưu</button>
                          </div>
                     </div>
@@ -103,27 +104,28 @@
 
                 <!-- Active Users List -->
                 <div class="flex-grow flex flex-col min-h-0">
-                    <h3 class="font-semibold text-lg mb-2">Người dùng đang hoạt động</h3>
-                    <div id="user-list-container" class="bg-gray-700/50 rounded-lg p-3 flex-grow overflow-y-auto">
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">Người dùng đang hoạt động</h3>
+                    <div id="user-list-container" class="bg-gray-50 border border-gray-200 rounded-lg p-3 flex-grow overflow-y-auto">
                         <ul id="user-list" class="space-y-3">
                            <!-- JS will populate this list -->
-                           <li class="text-gray-400 text-sm">Đang chờ người dùng khác...</li>
+                           <li class="text-gray-500 text-sm">Đang chờ người dùng khác...</li>
                         </ul>
                     </div>
                 </div>
             </div>
 
             <!-- Right Panel: Map -->
-            <div class="md:col-span-2 lg:col-span-3 bg-gray-800 rounded-xl p-1 md:p-2 h-full">
+            <!-- Layout changed: Flex-grow added to fill remaining height on mobile -->
+            <div class="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-1 md:p-2 flex-grow min-h-[300px]">
                 <div id="map"></div>
             </div>
         </div>
     </div>
     
     <!-- Modal for notifications -->
-    <div id="notification-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
-            <p id="notification-message" class="text-lg mb-4"></p>
+    <div id="notification-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <p id="notification-message" class="text-lg mb-4 text-gray-800"></p>
             <button onclick="document.getElementById('notification-modal').classList.add('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md">Đã hiểu</button>
         </div>
     </div>
@@ -215,10 +217,10 @@
                 zoomControl: false // We can add custom zoom controls if needed
             }).setView([21.0285, 105.8542], 13); // Default to Hanoi
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 20
+            // Switched to a light-themed map
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
             }).addTo(map);
             
             // Add zoom controls to the bottom right
@@ -231,7 +233,7 @@
         function startWatchingLocation() {
             if (!navigator.geolocation) {
                 locationStatus.textContent = 'Trình duyệt không hỗ trợ';
-                locationStatus.classList.replace('text-yellow-400', 'text-red-400');
+                locationStatus.classList.replace('text-yellow-600', 'text-red-600');
                 showNotification('Trình duyệt của bạn không hỗ trợ Geolocation.');
                 return;
             }
@@ -239,8 +241,8 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     locationStatus.textContent = 'Đang hoạt động';
-                    locationStatus.classList.remove('text-yellow-400', 'text-red-400');
-                    locationStatus.classList.add('text-green-400');
+                    locationStatus.classList.remove('text-yellow-600', 'text-red-600');
+                    locationStatus.classList.add('text-green-600');
 
                     const { latitude, longitude, speed } = position.coords;
                     const speedKmh = (speed || 0) * 3.6;
@@ -259,8 +261,8 @@
                     else if (error.code === error.POSITION_UNAVAILABLE) message = 'Vị trí không khả dụng.';
                     
                     locationStatus.textContent = message;
-                    locationStatus.classList.remove('text-yellow-400', 'text-green-400');
-                    locationStatus.classList.add('text-red-400');
+                    locationStatus.classList.remove('text-yellow-600', 'text-green-600');
+                    locationStatus.classList.add('text-red-600');
                     showNotification(message);
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -381,15 +383,21 @@
          */
         function updateUserListUI(users) {
             userList.innerHTML = ''; // Clear the list
-            if (users.length === 0 || (users.length === 1 && users[0].id === currentUser.uid)) {
-                userList.innerHTML = '<li class="text-gray-400 text-sm">Chưa có người dùng nào khác.</li>';
+            const sortedUsers = users.sort((a, b) => {
+                if (a.id === currentUser.uid) return -1; // Current user always first
+                if (b.id === currentUser.uid) return 1;
+                return (a.name || '').localeCompare(b.name || ''); // Sort others by name
+            });
+            
+            if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
+                userList.innerHTML = '<li class="text-gray-500 text-sm">Chưa có người dùng nào khác.</li>';
                 return;
             }
 
-            users.forEach(user => {
+            sortedUsers.forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
                 const li = document.createElement('li');
-                li.className = 'flex items-center justify-between p-2 rounded-md transition hover:bg-gray-700 cursor-pointer';
+                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} cursor-pointer`;
                 li.onclick = () => {
                     if (userMarkers[user.id]) {
                         map.setView(userMarkers[user.id].getLatLng(), 16);
@@ -399,12 +407,12 @@
 
                 li.innerHTML = `
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm">
+                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
                             ${(user.name || 'A').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                            <p class="font-semibold text-white">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs text-green-400">(Bạn)</span>' : ''}</p>
-                            <p class="text-xs text-gray-400">Tốc độ: ${user.speed?.toFixed(1) || 0} km/h</p>
+                            <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                            <p class="text-xs text-gray-500">Tốc độ: ${user.speed?.toFixed(1) || 0} km/h</p>
                         </div>
                     </div>
                 `;
