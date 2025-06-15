@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v4.4 - Quản lý Nhóm</title>
+    <title>Theo Dõi Vị Trí v4.5 - Tham gia bằng liên kết</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -69,11 +69,14 @@
                 <div>
                     <h2 class="text-2xl font-bold mb-2 text-gray-900">Bảng điều khiển</h2>
                     <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg mb-4">
-                        <p class="text-sm text-blue-800">Mã mời của nhóm:</p>
+                        <p class="text-sm text-blue-800">Mời bạn bè bằng liên kết:</p>
                         <div class="flex items-center gap-2">
                            <span id="group-code-display" class="font-mono text-xl font-bold text-blue-900"></span>
-                           <button id="copy-code-btn" title="Sao chép mã" class="text-blue-600 hover:text-blue-800">
-                               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                           <button id="copy-code-btn" title="Sao chép liên kết mời" class="text-blue-600 hover:text-blue-800">
+                               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M8 4a1 1 0 011-1h6a1 1 0 110 2H9a1 1 0 01-1-1zM6 8a1 1 0 00-1 1v6a1 1 0 102 0V9a1 1 0 00-1-1z" />
+                                <path d="M12 2.25A9.75 9.75 0 002.25 12c0 4.142 2.683 7.625 6.25 8.9V12.75A4.25 4.25 0 0112.75 8.5H18a1 1 0 011 1v2.871A9.742 9.742 0 0021.75 12 9.75 9.75 0 0012 2.25z" />
+                               </svg>
                            </button>
                         </div>
                     </div>
@@ -213,7 +216,7 @@
             deviceNameInput.value = localStorage.getItem('deviceName') || '';
             if (!map) initializeMap();
             startWatchingLocation();
-            startListeningToGroupChanges(); // Changed function name for clarity
+            startListeningToGroupChanges();
             initializeWakeLock();
         }
 
@@ -243,17 +246,18 @@
             }
         }
         
-        async function joinGroup(groupCode) {
-            if (!groupCode) { showNotification("Vui lòng nhập mã mời."); return; }
-            const originalText = confirmJoinBtn.textContent;
-            setButtonLoadingState(confirmJoinBtn, true, originalText, 'Đang kiểm tra...');
+        // NÂNG CẤP: Logic tham gia nhóm, trả về true/false
+        async function joinGroupLogic(groupCode) {
+            if (!groupCode) {
+                showNotification("Vui lòng nhập mã mời.");
+                return false;
+            }
             try {
                 const q = query(collection(db, "groups"), where("code", "==", groupCode.toUpperCase()));
                 const querySnapshot = await getDocs(q);
                 if (querySnapshot.empty) {
                     showNotification("Mã nhóm không tồn tại.");
-                    setButtonLoadingState(confirmJoinBtn, false, originalText);
-                    return;
+                    return false;
                 }
                 const groupDoc = querySnapshot.docs[0];
                 const groupData = groupDoc.data();
@@ -262,9 +266,11 @@
                 localStorage.setItem('groupId', currentGroup.id);
                 await ensureUserLocationDocExists();
                 initializeAppForGroup();
-            } catch(error) {
+                return true;
+            } catch (error) {
                 console.error("Lỗi khi tham gia nhóm:", error);
-                setButtonLoadingState(confirmJoinBtn, false, originalText);
+                showNotification("Không thể tham gia nhóm. Vui lòng thử lại.");
+                return false;
             }
         }
         
@@ -274,8 +280,8 @@
                  try { await updateDoc(doc(db, "groups", currentGroup.id), { members: arrayRemove(currentUser.uid) }); } 
                  catch(error) { console.error("Lỗi khi rời nhóm:", error); }
             }
-            if (groupUnsubscribe) groupUnsubscribe();
-            if (locationsUnsubscribe) locationsUnsubscribe();
+            if (groupUnsubscribe) { groupUnsubscribe(); groupUnsubscribe = null; }
+            if (locationsUnsubscribe) { locationsUnsubscribe(); locationsUnsubscribe = null; }
             localStorage.removeItem('groupId');
             currentGroup = null;
             Object.values(mapObjects).forEach(({marker, polyline}) => {
@@ -288,21 +294,18 @@
             }
         }
         
-        // NÂNG CẤP: Chức năng xóa thành viên cho chủ nhóm
         window.removeUserFromGroup = async (userIdToRemove, userName) => {
             if (!currentGroup || currentUser.uid !== currentGroup.ownerId) {
                 showNotification("Chỉ chủ nhóm mới có quyền xóa thành viên.");
                 return;
             }
             if(confirm(`Bạn có chắc chắn muốn xóa "${userName}" khỏi nhóm không?`)) {
-                const groupDocRef = doc(db, "groups", currentGroup.id);
-                await updateDoc(groupDocRef, {
+                await updateDoc(doc(db, "groups", currentGroup.id), {
                     members: arrayRemove(userIdToRemove)
                 });
                 showNotification(`Đã xóa "${userName}" khỏi nhóm.`);
             }
         }
-
 
         async function ensureUserLocationDocExists() {
             const locationDocRef = doc(db, `groups/${currentGroup.id}/locations`, currentUser.uid);
@@ -339,30 +342,19 @@
         }
         
         // --- Realtime Logic ---
-        // NÂNG CẤP: Lắng nghe cả thay đổi của nhóm (thành viên) và vị trí
         function startListeningToGroupChanges() {
             if (groupUnsubscribe) groupUnsubscribe();
-            
             groupUnsubscribe = onSnapshot(doc(db, "groups", currentGroup.id), (groupDoc) => {
-                if (!groupDoc.exists()) {
-                    leaveGroup(true); // Nhóm đã bị xóa
-                    return;
-                }
+                if (!groupDoc.exists()) { leaveGroup(true); return; }
                 const groupData = groupDoc.data();
-                if (!groupData.members.includes(currentUser.uid)) {
-                    leaveGroup(true); // Bị xóa khỏi nhóm
-                    return;
-                }
-                currentGroup.ownerId = groupData.ownerId; // Cập nhật ownerId
-                
-                // Chỉ lắng nghe vị trí sau khi xác nhận vẫn là thành viên
+                if (!groupData.members.includes(currentUser.uid)) { leaveGroup(true); return; }
+                currentGroup.ownerId = groupData.ownerId;
                 startListeningToLocations();
             });
         }
 
         function startListeningToLocations() {
-            if (locationsUnsubscribe) return; // Chỉ chạy một lần
-            
+            if (locationsUnsubscribe) return;
             const locationsCollection = collection(db, `groups/${currentGroup.id}/locations`);
             locationsUnsubscribe = onSnapshot(locationsCollection, (snapshot) => {
                 const activeUserIds = new Set(snapshot.docs.map(d => d.id));
@@ -399,37 +391,27 @@
         function updateUserListUI(users) {
             userList.innerHTML = '';
             const isOwner = currentUser.uid === currentGroup.ownerId;
-
             users.sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
                 const li = document.createElement('li');
                 li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'}`;
                 const statusText = `Hoạt động ${formatTimeAgo(user.timestamp)}`;
                 const ownerIcon = user.id === currentGroup.ownerId ? '👑' : '';
-                
                 let removeButton = '';
                 if(isOwner && !isCurrentUser) {
                     removeButton = `<button onclick="window.removeUserFromGroup('${user.id}', '${user.name || 'Người dùng ẩn danh'}')" class="text-red-500 hover:text-red-700 p-1" title="Xóa thành viên">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
                                     </button>`;
                 }
-
                 li.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3 flex-grow cursor-pointer" onclick="window.panToUser('${user.id}')">
                             <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
-                            <div>
-                                <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p>
-                                <p class="text-xs text-gray-500">${statusText}</p>
-                            </div>
+                            <div><p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} <span class="text-yellow-500">${ownerIcon}</span></p><p class="text-xs text-gray-500">${statusText}</p></div>
                         </div>
                         ${removeButton}
                     </div>
-                    <div class="mt-2 text-right">
-                        <button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50">
-                            Xem đầy đủ
-                        </button>
-                    </div>`;
+                    <div class="mt-2 text-right"><button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50">Xem đầy đủ</button></div>`;
                 userList.appendChild(li);
             });
         }
@@ -504,7 +486,16 @@
         createGroupBtn.addEventListener('click', createGroup);
         joinGroupBtn.addEventListener('click', () => joinGroupModal.classList.remove('hidden'));
         cancelJoinBtn.addEventListener('click', () => joinGroupModal.classList.add('hidden'));
-        confirmJoinBtn.addEventListener('click', () => joinGroup(groupCodeInput.value));
+        confirmJoinBtn.addEventListener('click', async () => {
+            const code = groupCodeInput.value;
+            if (!code) { showNotification("Vui lòng nhập mã mời."); return; }
+            const originalText = confirmJoinBtn.textContent;
+            setButtonLoadingState(confirmJoinBtn, true, originalText, 'Đang kiểm tra...');
+            const success = await joinGroupLogic(code);
+            if (!success) {
+                setButtonLoadingState(confirmJoinBtn, false, originalText);
+            }
+        });
         leaveGroupBtn.addEventListener('click', () => { if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); });
         saveNameButton.addEventListener('click', async () => {
             const newName = deviceNameInput.value.trim();
@@ -514,7 +505,11 @@
                 showNotification(`Tên đã lưu thành "${newName}".`);
             }
         });
-        copyCodeBtn.addEventListener('click', () => { navigator.clipboard.writeText(groupCodeDisplay.textContent).then(() => showNotification(`Đã sao chép mã: ${groupCodeDisplay.textContent}`)); });
+        copyCodeBtn.addEventListener('click', () => {
+            const baseUrl = window.location.href.split('?')[0];
+            const shareLink = `${baseUrl}?group_code=${currentGroup.code}`;
+            navigator.clipboard.writeText(shareLink).then(() => showNotification(`Đã sao chép liên kết mời!`));
+        });
         centerOnMeBtn.addEventListener('click', () => { if(currentUser?.uid && mapObjects[currentUser.uid]?.marker) map.setView(mapObjects[currentUser.uid].marker.getLatLng(), 16) });
         fitAllUsersBtn.addEventListener('click', () => {
             const markers = Object.values(mapObjects).map(obj => obj.marker).filter(Boolean);
@@ -530,18 +525,32 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
-                        authStatus.textContent = 'Đã kết nối. Sẵn sàng!';
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const groupCodeFromUrl = urlParams.get('group_code');
+                        
+                        if (groupCodeFromUrl) {
+                            authStatus.textContent = `Đang tham gia nhóm từ liên kết...`;
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            await joinGroupLogic(groupCodeFromUrl);
+                        } else {
+                            const storedGroupId = localStorage.getItem('groupId');
+                            if (storedGroupId) {
+                                authStatus.textContent = 'Đang kết nối lại nhóm...';
+                                const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
+                                if (groupDoc.exists()) {
+                                    const groupData = groupDoc.data();
+                                    currentGroup = { id: storedGroupId, code: groupData.code, ownerId: groupData.ownerId };
+                                    initializeAppForGroup();
+                                } else { 
+                                    localStorage.removeItem('groupId');
+                                    authStatus.textContent = 'Đã kết nối. Sẵn sàng!';
+                                }
+                            } else {
+                                authStatus.textContent = 'Đã kết nối. Sẵn sàng!';
+                            }
+                        }
                         createGroupBtn.disabled = false;
                         joinGroupBtn.disabled = false;
-                        const storedGroupId = localStorage.getItem('groupId');
-                        if (storedGroupId) {
-                            const groupDoc = await getDoc(doc(db, "groups", storedGroupId));
-                            if (groupDoc.exists()) {
-                                const groupData = groupDoc.data();
-                                currentGroup = { id: storedGroupId, code: groupData.code, ownerId: groupData.ownerId };
-                                initializeAppForGroup();
-                            } else { localStorage.removeItem('groupId'); }
-                        }
                     } else { signInAnonymously(auth).catch((err) => { console.error(err); authStatus.textContent = 'Lỗi xác thực.'; }); }
                 });
             } catch (error) { console.error(error); authStatus.textContent = 'Lỗi khởi tạo ứng dụng.'; }
