@@ -144,16 +144,15 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // --- Firebase Configuration ---
+      // --- Firebase Configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            // Your default fallback config here
-            apiKey: "AIzaSyABC...",
-            authDomain: "your-project.firebaseapp.com",
-            projectId: "your-project",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "1234567890",
-            appId: "1:1234567890:web:abcdef123456"
+            apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
+            authDomain: "ailocal-86167.firebaseapp.com",
+            projectId: "ailocal-86167",
+            storageBucket: "ailocal-86167.firebasestorage.app",
+            messagingSenderId: "303592611625",
+            appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
         };
 
         // --- DOM Elements ---
