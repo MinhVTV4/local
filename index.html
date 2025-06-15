@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí Thời Gian Thực - V3 (Path Pruning)</title>
+    <title>Theo Dõi Vị Trí Thời Gian Thực - V3.1 (Xem Lịch Sử)</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -139,18 +139,18 @@
     <!-- Firebase JS SDK -->
     <script type="module">
         // Import Firebase modules
-        // THAY ĐỔI: Thêm 'addDoc' để có thể tạo tài liệu mới trong subcollection
+        // NÂNG CẤP: Thêm 'getDocs' và 'query' để đọc toàn bộ lịch sử
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-      // --- Firebase Configuration ---
+        // --- Firebase Configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
             authDomain: "ailocal-86167.firebaseapp.com",
             projectId: "ailocal-86167",
-            storageBucket: "ailocal-86167.firebasestorage.app",
+            storageBucket: "ailocal-86167.appspot.com",
             messagingSenderId: "303592611625",
             appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
         };
@@ -183,10 +183,7 @@
         let lastPosition = null;
         const speedReadings = [];
         const SMOOTHING_FACTOR = 5; 
-
-        // THAY ĐỔI: Thêm hằng số ngưỡng để lưu trữ đường đi
-        const PATH_ARCHIVE_THRESHOLD = 50; // Khi mảng 'path' đạt 50 điểm, nó sẽ được lưu trữ.
-
+        const PATH_ARCHIVE_THRESHOLD = 50;
         const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
@@ -201,17 +198,12 @@
             const seconds = Math.floor((now - timestamp.toDate()) / 1000);
 
             if (seconds < 60) return 'vừa xong';
-            let interval = seconds / 31536000;
-            if (interval > 1) return Math.floor(interval) + " năm trước";
-            interval = seconds / 2592000;
-            if (interval > 1) return Math.floor(interval) + " tháng trước";
-            interval = seconds / 86400;
-            if (interval > 1) return Math.floor(interval) + " ngày trước";
-            interval = seconds / 3600;
-            if (interval > 1) return Math.floor(interval) + " giờ trước";
-            interval = seconds / 60;
-            if (interval > 1) return Math.floor(interval) + " phút trước";
-            return 'vừa xong';
+            let interval = seconds / 60;
+            if(interval < 60) return `${Math.floor(interval)} phút trước`;
+            interval = interval / 60;
+            if(interval < 24) return `${Math.floor(interval)} giờ trước`;
+            interval = interval / 24;
+            return `${Math.floor(interval)} ngày trước`;
         }
 
         // --- Core Application Logic ---
@@ -244,28 +236,18 @@
                 lastPosition = newPosition;
                 return 0;
             }
-
             const distanceMeters = L.latLng(lastPosition.coords.latitude, lastPosition.coords.longitude)
                 .distanceTo(L.latLng(newPosition.coords.latitude, newPosition.coords.longitude));
-            
             const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
-
             if (timeSeconds <= 0) {
                  lastPosition = newPosition;
                  return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
             }
-
-            const speedMs = distanceMeters / timeSeconds;
-            const speedKmh = speedMs * 3.6;
-
+            const speedKmh = (distanceMeters / timeSeconds) * 3.6;
             speedReadings.push(speedKmh);
-            if (speedReadings.length > SMOOTHING_FACTOR) {
-                speedReadings.shift(); 
-            }
-
+            if (speedReadings.length > SMOOTHING_FACTOR) speedReadings.shift();
             const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
             lastPosition = newPosition; 
-            
             return smoothedSpeed;
         }
 
@@ -281,11 +263,9 @@
                     locationStatus.textContent = 'Đang hoạt động';
                     const { latitude, longitude } = position.coords;
                     const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
-
                     latDisplay.textContent = latitude.toFixed(5);
                     lngDisplay.textContent = longitude.toFixed(5);
                     speedDisplay.textContent = calculatedSpeedKmh.toFixed(1);
-                    
                     updateLocationInFirestore({ latitude, longitude, speedKmh: calculatedSpeedKmh });
                 },
                 (error) => {
@@ -299,12 +279,6 @@
             );
         }
         
-        /**
-         * NÂNG CẤP: Triển khai logic Cắt/Lưu trữ Đường đi (Path Pruning)
-         * Hàm này giờ sẽ kiểm tra độ dài của mảng 'path'. Nếu nó quá dài, nó sẽ
-         * di chuyển đoạn đường đó vào một subcollection 'path_archives' và đặt lại
-         * mảng 'path' chính, giúp tài liệu chính luôn nhỏ gọn và tiết kiệm chi phí.
-         */
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser) return;
 
@@ -312,80 +286,53 @@
             const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                // Bước 1: Lấy tài liệu hiện tại để kiểm tra độ dài của 'path'
                 const docSnap = await getDoc(userDocRef);
-
-                if (!docSnap.exists()) {
-                    console.error("Tài liệu người dùng không tồn tại khi đang cập nhật.");
-                    return; // Dừng lại nếu không tìm thấy tài liệu
-                }
+                if (!docSnap.exists()) return;
                 
                 const userData = docSnap.data();
                 const currentPath = userData.path || [];
 
-                // Bước 2: Kiểm tra xem 'path' đã đạt đến ngưỡng lưu trữ chưa
                 if (currentPath.length >= PATH_ARCHIVE_THRESHOLD) {
-                    // Đã đến lúc lưu trữ!
                     console.log(`Đạt ngưỡng ${PATH_ARCHIVE_THRESHOLD} điểm. Đang lưu trữ...`);
-
-                    // Đoạn đường mới sẽ bắt đầu từ điểm cuối cùng của đoạn cũ để đảm bảo tính liên tục
                     const newPath = [currentPath[currentPath.length - 1], newPoint];
-
-                    // Tạo một tham chiếu đến subcollection 'path_archives'
                     const archiveCollectionRef = collection(db, FIRESTORE_COLLECTION, currentUser.uid, 'path_archives');
-                    
-                    // Thêm đoạn đường cũ vào collection lưu trữ
                     await addDoc(archiveCollectionRef, {
                         segment: currentPath,
-                        createdAt: serverTimestamp() // Ghi lại thời điểm lưu trữ
+                        createdAt: serverTimestamp()
                     });
-
-                    // Cập nhật tài liệu chính với đoạn đường mới đã được cắt tỉa
                     await updateDoc(userDocRef, {
                         name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
                         timestamp: serverTimestamp(),
                         lastSpeed: speedKmh,
-                        path: newPath // Quan trọng: Thay thế toàn bộ mảng cũ
+                        path: newPath
                     });
-                     console.log(`Đã lưu trữ thành công cho người dùng ${currentUser.uid}`);
-
+                    console.log(`Đã lưu trữ thành công cho người dùng ${currentUser.uid}`);
                 } else {
-                    // 'path' vẫn còn ngắn, chỉ cần thêm điểm mới vào như bình thường
                     await updateDoc(userDocRef, {
                         name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
                         timestamp: serverTimestamp(),
                         lastSpeed: speedKmh,
-                        path: arrayUnion(newPoint) // Sử dụng arrayUnion hiệu quả
+                        path: arrayUnion(newPoint)
                     });
                 }
-
             } catch (error) {
-                console.error("Lỗi khi cập nhật vị trí với logic pruning:", error);
+                console.error("Lỗi khi cập nhật vị trí:", error);
                 showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
         }
         
         function startListeningToOtherUsers() {
             const usersCollection = collection(db, FIRESTORE_COLLECTION);
-
-            // LƯU Ý: Listener này hiện tại chỉ lấy dữ liệu từ tài liệu chính.
-            // Vì vậy, nó sẽ chỉ hiển thị đoạn đường gần đây nhất của người dùng sau khi
-            // pruning diễn ra. Để hiển thị toàn bộ lịch sử, cần một logic phức tạp hơn
-            // để lấy dữ liệu từ cả 'path_archives'.
             onSnapshot(usersCollection, (snapshot) => {
                 const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 const activeUserIds = new Set(activeUsers.map(u => u.id));
-
                 activeUsers.forEach(user => updateUserOnMap(user.id, user));
-
                 Object.keys(mapObjects).forEach(userId => {
-                    if (!activeUserIds.has(userId)) {
-                        removeUserFromMap(userId);
-                    }
+                    if (!activeUserIds.has(userId)) removeUserFromMap(userId);
                 });
                 updateUserListUI(activeUsers);
             }, (error) => {
-                console.error("Firestore snapshot error:", error);
+                console.error("Lỗi Firestore snapshot:", error);
                 showNotification(`Lỗi đồng bộ dữ liệu: ${error.message}.`);
             });
         }
@@ -401,13 +348,9 @@
             const now = Date.now();
             const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
             
-            if (!mapObjects[userId]) {
-                mapObjects[userId] = { marker: null, polyline: null };
-            }
+            if (!mapObjects[userId]) mapObjects[userId] = { marker: null, polyline: null };
             
             const userMapObject = mapObjects[userId];
-
-            // --- Marker Logic ---
             const markerIcon = L.divIcon({
                 className: isCurrentUser ? 'current-user-marker' : 'other-user-marker',
                 html: isCurrentUser ? '' : `<span>${(userData.name || 'A').charAt(0).toUpperCase()}</span>`,
@@ -419,24 +362,15 @@
                 userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
             } else {
                 userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
-                if (isCurrentUser && path.length <= 2) { // Changed from 1 to 2
-                    map.setView(latLng, 15);
-                }
+                if (isCurrentUser && path.length <= 2) map.setView(latLng, 15);
             }
             
-            const popupContent = `
-                <div class="font-sans">
-                    <strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>
-                    Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h
-                    ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}
-                </div>`;
+            const popupContent = `<div class="font-sans"><strong class="text-base">${userData.name || 'Người dùng ẩn danh'}</strong><br>Tốc độ: ${userData.lastSpeed?.toFixed(1) || 0} km/h ${isCurrentUser ? '<br><em class="text-gray-500">(Đây là bạn)</em>' : ''}</div>`;
             userMapObject.marker.bindPopup(popupContent);
 
-            // --- Polyline Logic (with online/offline styles) ---
             const polylinePoints = path.map(p => [p.lat, p.lng]);
             const onlineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
-            const offlineColor = '#9ca3af'; // gray-400
-
+            const offlineColor = '#9ca3af';
             const polylineOptions = { 
                 color: isOnline ? onlineColor : offlineColor,
                 weight: 4,
@@ -445,8 +379,7 @@
             };
             
             if (userMapObject.polyline) {
-                userMapObject.polyline.setLatLngs(polylinePoints);
-                userMapObject.polyline.setStyle(polylineOptions);
+                userMapObject.polyline.setLatLngs(polylinePoints).setStyle(polylineOptions);
             } else {
                 userMapObject.polyline = L.polyline(polylinePoints, polylineOptions).addTo(map);
             }
@@ -460,21 +393,20 @@
                 delete mapObjects[userId];
             }
         }
-
+        
+        /**
+         * NÂNG CẤP: Giao diện danh sách người dùng giờ có thêm nút để tải toàn bộ lịch sử
+         */
         function updateUserListUI(users) {
             userList.innerHTML = '';
             const now = Date.now();
-
             const sortedUsers = users.sort((a, b) => {
                 if (a.id === currentUser.uid) return -1;
                 if (b.id === currentUser.uid) return 1;
-
                 const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
                 const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
-
                 if (aIsOnline && !bIsOnline) return -1;
                 if (!aIsOnline && bIsOnline) return 1;
-                
                 return (a.name || '').localeCompare(b.name || '');
             });
             
@@ -488,41 +420,97 @@
                 const isOnline = user.timestamp ? (now - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
 
                 const li = document.createElement('li');
-                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''} cursor-pointer`;
-                li.onclick = () => {
-                    if (mapObjects[user.id] && mapObjects[user.id].marker) {
-                        map.setView(mapObjects[user.id].marker.getLatLng(), 16);
-                        mapObjects[user.id].marker.openPopup();
-                    }
-                };
-
+                li.className = `p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''}`;
+                
                 const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
                 const statusText = isOnline ? `Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h` : `Hoạt động ${formatTimeAgo(user.timestamp)}`;
 
                 li.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="relative">
-                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
-                                ${(user.name || 'A').charAt(0).toUpperCase()}
+                    <div class="flex items-center justify-between cursor-pointer" onclick="window.panToUser('${user.id}')">
+                        <div class="flex items-center gap-3">
+                            <div class="relative">
+                                <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">${(user.name || 'A').charAt(0).toUpperCase()}</div>
+                                <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
                             </div>
-                            <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
+                            <div>
+                                <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
+                                <p class="text-xs text-gray-500">${statusText}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
-                            <p class="text-xs text-gray-500">${statusText}</p>
-                        </div>
+                    </div>
+                    <div class="mt-2 text-right">
+                        <button id="load-history-${user.id}" onclick="window.loadAndDisplayFullPath('${user.id}')" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-2 py-1 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed">
+                            Xem đầy đủ
+                        </button>
                     </div>
                 `;
                 userList.appendChild(li);
             });
         }
+
+        // NÂNG CẤP: Hàm mới để tải và hiển thị toàn bộ lịch sử đường đi
+        window.loadAndDisplayFullPath = async (userId) => {
+            const button = document.getElementById(`load-history-${userId}`);
+            button.textContent = 'Đang tải...';
+            button.disabled = true;
+
+            try {
+                const userDocRef = doc(db, FIRESTORE_COLLECTION, userId);
+                const archiveCollectionRef = collection(db, FIRESTORE_COLLECTION, userId, 'path_archives');
+                
+                // Sắp xếp các đoạn lưu trữ theo thời gian tạo để đảm bảo thứ tự chính xác
+                const archiveQuery = query(archiveCollectionRef, orderBy("createdAt", "asc"));
+
+                // Lấy tài liệu chính và các tài liệu lưu trữ cùng lúc
+                const [userDocSnap, archiveSnap] = await Promise.all([
+                    getDoc(userDocRef),
+                    getDocs(archiveQuery)
+                ]);
+
+                if (!userDocSnap.exists()) {
+                    showNotification("Không tìm thấy dữ liệu người dùng.");
+                    return;
+                }
+
+                const userData = userDocSnap.data();
+                
+                // Nối các đoạn đường đã lưu trữ
+                const archivedPath = archiveSnap.docs.flatMap(doc => doc.data().segment || []);
+
+                // Kết hợp đường đi đã lưu trữ với đường đi hiện tại trong tài liệu chính
+                const fullPath = [...archivedPath, ...(userData.path || [])];
+
+                // Cập nhật lại đối tượng userData với đường đi đầy đủ
+                const updatedUserData = { ...userData, path: fullPath };
+
+                // Vẽ lại đường đi của người dùng trên bản đồ với dữ liệu đầy đủ
+                updateUserOnMap(userId, updatedUserData);
+
+                showNotification(`Đã tải toàn bộ lịch sử cho ${userData.name || 'Người dùng ẩn danh'}.`);
+                button.textContent = 'Đã tải';
+
+            } catch (error) {
+                console.error(`Lỗi khi tải lịch sử cho ${userId}:`, error);
+                showNotification("Không thể tải lịch sử. Vui lòng thử lại.");
+                button.textContent = 'Thử lại';
+                button.disabled = false;
+            }
+        };
+        
+        // NÂNG CẤP: Hàm nhỏ để pan tới người dùng khi click
+        window.panToUser = (userId) => {
+            if (mapObjects[userId] && mapObjects[userId].marker) {
+                map.setView(mapObjects[userId].marker.getLatLng(), 16);
+                mapObjects[userId].marker.openPopup();
+            }
+        };
         
         // --- Event Listeners ---
         startTrackingButton.addEventListener('click', () => {
             authStatus.textContent = 'Đang kết nối...';
             startTrackingButton.disabled = true;
             signInAnonymously(auth).catch((error) => {
-                console.error("Anonymous sign-in failed: ", error);
+                console.error("Lỗi đăng nhập ẩn danh:", error);
                 authStatus.textContent = 'Xác thực thất bại. Vui lòng thử lại.';
                 showNotification(`Lỗi xác thực: ${error.message}`);
                 startTrackingButton.disabled = false;
@@ -551,7 +539,6 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
-                        
                         const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
                         const docSnap = await getDoc(userDocRef);
                         if (!docSnap.exists()) {
@@ -562,12 +549,11 @@
                                     path: [] 
                                 });
                             } catch (error) {
-                                console.error("Error creating user document:", error);
+                                console.error("Lỗi khi tạo tài liệu người dùng:", error);
                                 showNotification("Không thể tạo hồ sơ người dùng.");
                                 return;
                             }
                         }
-
                         authStatus.textContent = 'Xác thực thành công!';
                         if(!appScreen.classList.contains('hidden')) return;
                         initializeAppLogic();
@@ -580,7 +566,7 @@
                     }
                 });
             } catch (error) {
-                console.error("Firebase initialization failed:", error);
+                console.error("Lỗi khởi tạo Firebase:", error);
                 authStatus.textContent = "Lỗi khởi tạo. Kiểm tra console.";
                 showNotification(`Không thể khởi tạo ứng dụng: ${error.message}`);
             }
