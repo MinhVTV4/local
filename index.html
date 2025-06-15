@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.0 - Bản Hoàn Chỉnh</title>
+    <title>Theo Dõi Vị Trí v5.1 - Hoàn thiện Quản lý</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -247,7 +247,18 @@
             deviceNameDisplay.textContent = currentDeviceName;
             deviceNameInput.value = currentDeviceName;
             
-            if (currentUser.uid === currentGroup.ownerId) renameGroupBtn.classList.remove('hidden'); else renameGroupBtn.classList.add('hidden');
+            if (currentUser.uid === currentGroup.ownerId) {
+                renameGroupBtn.classList.remove('hidden');
+                leaveGroupBtn.textContent = 'Xóa Nhóm';
+                leaveGroupBtn.classList.remove('bg-red-100', 'text-red-700', 'hover:bg-red-200');
+                leaveGroupBtn.classList.add('bg-red-600', 'text-white', 'hover:bg-red-700');
+            } else {
+                renameGroupBtn.classList.add('hidden');
+                leaveGroupBtn.textContent = 'Rời Nhóm';
+                leaveGroupBtn.classList.add('bg-red-100', 'text-red-700', 'hover:bg-red-200');
+                leaveGroupBtn.classList.remove('bg-red-600', 'text-white', 'hover:bg-red-700');
+            }
+
             if (!map) initializeMap();
             startWatchingLocation();
             startListeningToGroupChanges();
@@ -309,6 +320,22 @@
             if (wasKicked) showNotification("Bạn đã bị xóa khỏi nhóm.");
         }
         
+        async function deleteGroup() {
+            if(!currentGroup || currentUser.uid !== currentGroup.ownerId) return;
+            if(confirm("HÀNH ĐỘNG KHÔNG THỂ HOÀN TÁC!\n\nBạn có chắc chắn muốn xóa vĩnh viễn nhóm này cho tất cả mọi người không?")) {
+                try {
+                    await deleteDoc(doc(db, "groups", currentGroup.id));
+                    // No need to delete subcollections manually on client, they will be orphaned but won't be accessible.
+                    // The onSnapshot listener on other clients will fire, see the group is gone, and trigger their leaveGroup(true).
+                    leaveGroup(true); 
+                    showNotification("Đã xóa nhóm thành công.");
+                } catch(error) {
+                    console.error("Lỗi khi xóa nhóm:", error);
+                    showNotification("Không thể xóa nhóm, vui lòng thử lại.");
+                }
+            }
+        }
+
         window.removeUserFromGroup = async (userIdToRemove, userName) => {
             if (!currentGroup || currentUser.uid !== currentGroup.ownerId) return;
             if(confirm(`Bạn có chắc chắn muốn xóa "${userName}" khỏi nhóm không?`)) {
@@ -372,7 +399,7 @@
             if (locationsUnsubscribe) return;
             locationsUnsubscribe = onSnapshot(collection(db, `groups/${currentGroup.id}/locations`), (snapshot) => {
                 const activeUserIds = new Set(snapshot.docs.map(d => d.id));
-                allUsersData = snapshot.docs.map(d => ({id: d.id, ...d.data()})); // Store for filtering
+                allUsersData = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
                 allUsersData.forEach(user => updateUserOnMap(user.id, user));
                 Object.keys(mapObjects).forEach(userId => { if (!activeUserIds.has(userId)) removeUserFromMap(userId); });
                 updateUserListUI(allUsersData);
@@ -389,7 +416,7 @@
             
             if (userMapObject.marker) {
                 userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
-                userMapObject.marker.options.userData = userData; // Update data for filtering
+                userMapObject.marker.options.userData = userData;
             } else { 
                 userMapObject.marker = L.marker(latLng, { icon: markerIcon, userData: userData }); 
                 markerClusterGroup.addLayer(userMapObject.marker); 
@@ -520,7 +547,13 @@
             const success = await joinGroupLogic(code);
             if (!success) setButtonLoadingState(confirmJoinBtn, false, originalText);
         });
-        leaveGroupBtn.addEventListener('click', () => { if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); });
+        leaveGroupBtn.addEventListener('click', () => { 
+            if (currentUser.uid === currentGroup.ownerId) {
+                deleteGroup();
+            } else {
+                if (confirm("Bạn có chắc chắn muốn rời nhóm?")) leaveGroup(); 
+            }
+        });
         renameGroupBtn.addEventListener('click', renameGroup);
         editNameBtn.addEventListener('click', () => { displayNameView.classList.add('hidden'); editNameView.classList.remove('hidden'); });
         cancelEditNameBtn.addEventListener('click', () => { deviceNameInput.value = deviceNameDisplay.textContent; editNameView.classList.add('hidden'); displayNameView.classList.remove('hidden'); });
@@ -593,4 +626,4 @@
         main();
     </script>
 </body>
-</html>
+</ht
