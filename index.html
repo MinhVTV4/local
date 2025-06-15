@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí Thời Gian Thực - V2</title>
+    <title>Theo Dõi Vị Trí Thời Gian Thực - V3 (Path Pruning)</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -139,19 +139,21 @@
     <!-- Firebase JS SDK -->
     <script type="module">
         // Import Firebase modules
+        // THAY ĐỔI: Thêm 'addDoc' để có thể tạo tài liệu mới trong subcollection
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, updateDoc, arrayUnion, getDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'location-tracker-app';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyD3ZZT39FFnPINSnwXmFTFYLuUUoubHGiA",
-            authDomain: "ailocal-86167.firebaseapp.com",
-            projectId: "ailocal-86167",
-            storageBucket: "ailocal-86167.firebasestorage.app",
-            messagingSenderId: "303592611625",
-            appId: "1:303592611625:web:ec5967ec4e6f8bbc00e138"
+            // Your default fallback config here
+            apiKey: "AIzaSyABC...",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef123456"
         };
 
         // --- DOM Elements ---
@@ -183,7 +185,9 @@
         const speedReadings = [];
         const SMOOTHING_FACTOR = 5; 
 
-        // NEW: Constant for determining offline status
+        // THAY ĐỔI: Thêm hằng số ngưỡng để lưu trữ đường đi
+        const PATH_ARCHIVE_THRESHOLD = 50; // Khi mảng 'path' đạt 50 điểm, nó sẽ được lưu trữ.
+
         const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
@@ -192,11 +196,6 @@
             notificationModal.classList.remove('hidden');
         }
 
-        /**
-         * NEW: Utility to format relative time for display.
-         * @param {Firebase.Timestamp} timestamp - The Firestore timestamp object.
-         * @returns {string} A human-readable time string (e.g., "vừa xong", "5 phút trước").
-         */
         function formatTimeAgo(timestamp) {
             if (!timestamp) return 'không rõ';
             const now = new Date();
@@ -301,21 +300,68 @@
             );
         }
         
+        /**
+         * NÂNG CẤP: Triển khai logic Cắt/Lưu trữ Đường đi (Path Pruning)
+         * Hàm này giờ sẽ kiểm tra độ dài của mảng 'path'. Nếu nó quá dài, nó sẽ
+         * di chuyển đoạn đường đó vào một subcollection 'path_archives' và đặt lại
+         * mảng 'path' chính, giúp tài liệu chính luôn nhỏ gọn và tiết kiệm chi phí.
+         */
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser) return;
-            
+
             const userDocRef = doc(db, FIRESTORE_COLLECTION, currentUser.uid);
             const newPoint = { lat: latitude, lng: longitude };
 
             try {
-                await updateDoc(userDocRef, {
-                    name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
-                    timestamp: serverTimestamp(),
-                    lastSpeed: speedKmh, 
-                    path: arrayUnion(newPoint)
-                });
+                // Bước 1: Lấy tài liệu hiện tại để kiểm tra độ dài của 'path'
+                const docSnap = await getDoc(userDocRef);
+
+                if (!docSnap.exists()) {
+                    console.error("Tài liệu người dùng không tồn tại khi đang cập nhật.");
+                    return; // Dừng lại nếu không tìm thấy tài liệu
+                }
+                
+                const userData = docSnap.data();
+                const currentPath = userData.path || [];
+
+                // Bước 2: Kiểm tra xem 'path' đã đạt đến ngưỡng lưu trữ chưa
+                if (currentPath.length >= PATH_ARCHIVE_THRESHOLD) {
+                    // Đã đến lúc lưu trữ!
+                    console.log(`Đạt ngưỡng ${PATH_ARCHIVE_THRESHOLD} điểm. Đang lưu trữ...`);
+
+                    // Đoạn đường mới sẽ bắt đầu từ điểm cuối cùng của đoạn cũ để đảm bảo tính liên tục
+                    const newPath = [currentPath[currentPath.length - 1], newPoint];
+
+                    // Tạo một tham chiếu đến subcollection 'path_archives'
+                    const archiveCollectionRef = collection(db, FIRESTORE_COLLECTION, currentUser.uid, 'path_archives');
+                    
+                    // Thêm đoạn đường cũ vào collection lưu trữ
+                    await addDoc(archiveCollectionRef, {
+                        segment: currentPath,
+                        createdAt: serverTimestamp() // Ghi lại thời điểm lưu trữ
+                    });
+
+                    // Cập nhật tài liệu chính với đoạn đường mới đã được cắt tỉa
+                    await updateDoc(userDocRef, {
+                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
+                        timestamp: serverTimestamp(),
+                        lastSpeed: speedKmh,
+                        path: newPath // Quan trọng: Thay thế toàn bộ mảng cũ
+                    });
+                     console.log(`Đã lưu trữ thành công cho người dùng ${currentUser.uid}`);
+
+                } else {
+                    // 'path' vẫn còn ngắn, chỉ cần thêm điểm mới vào như bình thường
+                    await updateDoc(userDocRef, {
+                        name: deviceNameInput.value.trim() || 'Người dùng ẩn danh',
+                        timestamp: serverTimestamp(),
+                        lastSpeed: speedKmh,
+                        path: arrayUnion(newPoint) // Sử dụng arrayUnion hiệu quả
+                    });
+                }
+
             } catch (error) {
-                console.error("Error updating document:", error);
+                console.error("Lỗi khi cập nhật vị trí với logic pruning:", error);
                 showNotification(`Lỗi khi cập nhật vị trí: ${error.message}`);
             }
         }
@@ -323,6 +369,10 @@
         function startListeningToOtherUsers() {
             const usersCollection = collection(db, FIRESTORE_COLLECTION);
 
+            // LƯU Ý: Listener này hiện tại chỉ lấy dữ liệu từ tài liệu chính.
+            // Vì vậy, nó sẽ chỉ hiển thị đoạn đường gần đây nhất của người dùng sau khi
+            // pruning diễn ra. Để hiển thị toàn bộ lịch sử, cần một logic phức tạp hơn
+            // để lấy dữ liệu từ cả 'path_archives'.
             onSnapshot(usersCollection, (snapshot) => {
                 const activeUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 const activeUserIds = new Set(activeUsers.map(u => u.id));
@@ -341,11 +391,6 @@
             });
         }
         
-        /**
-         * UPDATED: Creates or updates a user's marker and polyline with online/offline styling.
-         * @param {string} userId - The ID of the user.
-         * @param {object} userData - The user's data from Firestore.
-         */
         function updateUserOnMap(userId, userData) {
             if (!map || !userData.path || userData.path.length === 0) return;
 
@@ -375,7 +420,7 @@
                 userMapObject.marker.setLatLng(latLng).setIcon(markerIcon);
             } else {
                 userMapObject.marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
-                if (isCurrentUser && path.length === 1) {
+                if (isCurrentUser && path.length <= 2) { // Changed from 1 to 2
                     map.setView(latLng, 15);
                 }
             }
@@ -417,15 +462,10 @@
             }
         }
 
-        /**
-         * UPDATED: Updates the list of users with online/offline status indicators.
-         * @param {Array} users - An array of active user objects.
-         */
         function updateUserListUI(users) {
             userList.innerHTML = '';
             const now = Date.now();
 
-            // Sort users: current user first, then by online status, then by name
             const sortedUsers = users.sort((a, b) => {
                 if (a.id === currentUser.uid) return -1;
                 if (b.id === currentUser.uid) return 1;
@@ -433,10 +473,10 @@
                 const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
                 const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
 
-                if (aIsOnline && !bIsOnline) return -1; // Online users first
+                if (aIsOnline && !bIsOnline) return -1;
                 if (!aIsOnline && bIsOnline) return 1;
                 
-                return (a.name || '').localeCompare(b.name || ''); // Then sort by name
+                return (a.name || '').localeCompare(b.name || '');
             });
             
             if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
