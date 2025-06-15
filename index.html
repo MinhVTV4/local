@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theo Dõi Vị Trí v5.2 - Bản Sửa Lỗi</title>
+    <title>Theo Dõi Vị Trí v5.3 - Cải tiến Gom Nhóm</title>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -218,7 +218,7 @@
         // --- Global State ---
         let db, auth, currentUser = null, currentGroup = null, map = null, markerClusterGroup = null;
         let mapObjects = {}, groupUnsubscribe = null, locationsUnsubscribe = null, wakeLock = null, lastPosition = null;
-        let allUsersData = []; // To store full user list for filtering
+        let allUsersData = [];
         const speedReadings = [], SMOOTHING_FACTOR = 5, PATH_ARCHIVE_THRESHOLD = 50, OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
@@ -269,7 +269,11 @@
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
-            markerClusterGroup = L.markerClusterGroup();
+            // SỬA LỖI: Thêm tùy chọn spiderfyOnEveryClick
+            markerClusterGroup = L.markerClusterGroup({
+                spiderfyOnEveryClick: true,
+                showCoverageOnHover: false,
+            });
             map.addLayer(markerClusterGroup);
         }
         
@@ -327,9 +331,7 @@
                     await deleteDoc(doc(db, "groups", currentGroup.id));
                     leaveGroup(true); 
                     showNotification("Đã xóa nhóm thành công.");
-                } catch(error) {
-                    console.error("Lỗi khi xóa nhóm:", error);
-                }
+                } catch(error) { console.error("Lỗi khi xóa nhóm:", error); }
             }
         }
 
