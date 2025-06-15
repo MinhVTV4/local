@@ -179,10 +179,12 @@
         let mapObjects = {}; // { userId: { marker, polyline } }
         const FIRESTORE_COLLECTION = `artifacts/${appId}/public/data/locations`;
 
-        // NEW: State for improved speed calculation
         let lastPosition = null;
         const speedReadings = [];
-        const SMOOTHING_FACTOR = 5; // Number of readings to average for smoothing
+        const SMOOTHING_FACTOR = 5; 
+
+        // NEW: Constant for determining offline status
+        const OFFLINE_THRESHOLD_MINUTES = 2;
 
         // --- Utility Functions ---
         function showNotification(message) {
@@ -190,11 +192,32 @@
             notificationModal.classList.remove('hidden');
         }
 
+        /**
+         * NEW: Utility to format relative time for display.
+         * @param {Firebase.Timestamp} timestamp - The Firestore timestamp object.
+         * @returns {string} A human-readable time string (e.g., "vừa xong", "5 phút trước").
+         */
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return 'không rõ';
+            const now = new Date();
+            const seconds = Math.floor((now - timestamp.toDate()) / 1000);
+
+            if (seconds < 60) return 'vừa xong';
+            let interval = seconds / 31536000;
+            if (interval > 1) return Math.floor(interval) + " năm trước";
+            interval = seconds / 2592000;
+            if (interval > 1) return Math.floor(interval) + " tháng trước";
+            interval = seconds / 86400;
+            if (interval > 1) return Math.floor(interval) + " ngày trước";
+            interval = seconds / 3600;
+            if (interval > 1) return Math.floor(interval) + " giờ trước";
+            interval = seconds / 60;
+            if (interval > 1) return Math.floor(interval) + " phút trước";
+            return 'vừa xong';
+        }
+
         // --- Core Application Logic ---
 
-        /**
-         * Initializes the entire application after successful authentication.
-         */
         function initializeAppLogic() {
             appIdDisplay.textContent = appId;
             userIdDisplay.textContent = currentUser.uid;
@@ -208,9 +231,6 @@
             startListeningToOtherUsers();
         }
 
-        /**
-         * Initializes the Leaflet map.
-         */
         function initializeMap() {
             if (map) return;
             map = L.map(mapElement, { zoomControl: false }).setView([21.0285, 105.8542], 13);
@@ -221,11 +241,6 @@
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
-        /**
-         * NEW: Calculates and smooths speed based on distance and time between position updates.
-         * @param {GeolocationPosition} newPosition - The new position object from watchPosition.
-         * @returns {number} The calculated and smoothed speed in km/h.
-         */
         function calculateAndSmoothSpeed(newPosition) {
             if (!lastPosition) {
                 lastPosition = newPosition;
@@ -237,7 +252,6 @@
             
             const timeSeconds = (newPosition.timestamp - lastPosition.timestamp) / 1000;
 
-            // Avoid division by zero and nonsensical speeds
             if (timeSeconds <= 0) {
                  lastPosition = newPosition;
                  return speedReadings.length > 0 ? speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length : 0;
@@ -246,23 +260,17 @@
             const speedMs = distanceMeters / timeSeconds;
             const speedKmh = speedMs * 3.6;
 
-            // Add new reading to our array for smoothing
             speedReadings.push(speedKmh);
             if (speedReadings.length > SMOOTHING_FACTOR) {
-                speedReadings.shift(); // Keep the array at a fixed size
+                speedReadings.shift(); 
             }
 
-            // Calculate the average of the last few readings
             const smoothedSpeed = speedReadings.reduce((a, b) => a + b, 0) / speedReadings.length;
-
-            lastPosition = newPosition; // Update last position for the next calculation
+            lastPosition = newPosition; 
             
             return smoothedSpeed;
         }
 
-        /**
-         * Starts watching the user's geolocation.
-         */
         function startWatchingLocation() {
             if (!navigator.geolocation) {
                 locationStatus.textContent = 'Trình duyệt không hỗ trợ';
@@ -274,8 +282,6 @@
                 (position) => {
                     locationStatus.textContent = 'Đang hoạt động';
                     const { latitude, longitude } = position.coords;
-
-                    // NEW: Use our own calculation for speed
                     const calculatedSpeedKmh = calculateAndSmoothSpeed(position);
 
                     latDisplay.textContent = latitude.toFixed(5);
@@ -295,10 +301,6 @@
             );
         }
         
-        /**
-         * Appends the user's latest location to the path array in Firestore.
-         * @param {object} locationData - Contains latitude, longitude, and speedKmh.
-         */
         async function updateLocationInFirestore({ latitude, longitude, speedKmh }) {
             if (!db || !currentUser) return;
             
@@ -318,9 +320,6 @@
             }
         }
         
-        /**
-         * Listens for real-time updates from other users in the Firestore collection.
-         */
         function startListeningToOtherUsers() {
             const usersCollection = collection(db, FIRESTORE_COLLECTION);
 
@@ -343,9 +342,9 @@
         }
         
         /**
-         * Creates or updates a user's marker and ENTIRE polyline from the path data.
+         * UPDATED: Creates or updates a user's marker and polyline with online/offline styling.
          * @param {string} userId - The ID of the user.
-         * @param {object} userData - The user's data from Firestore, including the `path` array.
+         * @param {object} userData - The user's data from Firestore.
          */
         function updateUserOnMap(userId, userData) {
             if (!map || !userData.path || userData.path.length === 0) return;
@@ -354,6 +353,9 @@
             const lastPoint = path[path.length - 1];
             const latLng = [lastPoint.lat, lastPoint.lng];
             const isCurrentUser = userId === currentUser.uid;
+            
+            const now = Date.now();
+            const isOnline = userData.timestamp ? (now - userData.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
             
             if (!mapObjects[userId]) {
                 mapObjects[userId] = { marker: null, polyline: null };
@@ -386,24 +388,26 @@
                 </div>`;
             userMapObject.marker.bindPopup(popupContent);
 
-            // --- Polyline Logic ---
+            // --- Polyline Logic (with online/offline styles) ---
             const polylinePoints = path.map(p => [p.lat, p.lng]);
-            const polylineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
+            const onlineColor = isCurrentUser ? '#22c55e' : '#3b82f6';
+            const offlineColor = '#9ca3af'; // gray-400
+
+            const polylineOptions = { 
+                color: isOnline ? onlineColor : offlineColor,
+                weight: 4,
+                opacity: isOnline ? 0.8 : 0.6,
+                dashArray: isOnline ? null : '5, 10'
+            };
+            
             if (userMapObject.polyline) {
                 userMapObject.polyline.setLatLngs(polylinePoints);
+                userMapObject.polyline.setStyle(polylineOptions);
             } else {
-                userMapObject.polyline = L.polyline(polylinePoints, { 
-                    color: polylineColor,
-                    weight: 4,
-                    opacity: 0.8
-                }).addTo(map);
+                userMapObject.polyline = L.polyline(polylinePoints, polylineOptions).addTo(map);
             }
         }
         
-        /**
-         * Removes a user's marker and polyline from the map.
-         * @param {string} userId - The ID of the user to remove.
-         */
         function removeUserFromMap(userId) {
             if (mapObjects[userId]) {
                 const { marker, polyline } = mapObjects[userId];
@@ -414,15 +418,25 @@
         }
 
         /**
-         * Updates the list of active users in the UI.
+         * UPDATED: Updates the list of users with online/offline status indicators.
          * @param {Array} users - An array of active user objects.
          */
         function updateUserListUI(users) {
             userList.innerHTML = '';
+            const now = Date.now();
+
+            // Sort users: current user first, then by online status, then by name
             const sortedUsers = users.sort((a, b) => {
                 if (a.id === currentUser.uid) return -1;
                 if (b.id === currentUser.uid) return 1;
-                return (a.name || '').localeCompare(b.name || '');
+
+                const aIsOnline = a.timestamp ? (now - a.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+                const bIsOnline = b.timestamp ? (now - b.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
+                if (aIsOnline && !bIsOnline) return -1; // Online users first
+                if (!aIsOnline && bIsOnline) return 1;
+                
+                return (a.name || '').localeCompare(b.name || ''); // Then sort by name
             });
             
             if (sortedUsers.length === 0 || (sortedUsers.length === 1 && sortedUsers[0].id === currentUser.uid)) {
@@ -432,8 +446,10 @@
 
             sortedUsers.forEach(user => {
                 const isCurrentUser = user.id === currentUser.uid;
+                const isOnline = user.timestamp ? (now - user.timestamp.toDate().getTime()) < OFFLINE_THRESHOLD_MINUTES * 60 * 1000 : false;
+
                 const li = document.createElement('li');
-                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} cursor-pointer`;
+                li.className = `flex items-center justify-between p-2 rounded-md transition ${isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-100'} ${!isOnline && !isCurrentUser ? 'opacity-60' : ''} cursor-pointer`;
                 li.onclick = () => {
                     if (mapObjects[user.id] && mapObjects[user.id].marker) {
                         map.setView(mapObjects[user.id].marker.getLatLng(), 16);
@@ -441,14 +457,20 @@
                     }
                 };
 
+                const statusDotColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                const statusText = isOnline ? `Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h` : `Hoạt động ${formatTimeAgo(user.timestamp)}`;
+
                 li.innerHTML = `
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
-                            ${(user.name || 'A').charAt(0).toUpperCase()}
+                        <div class="relative">
+                            <div class="w-10 h-10 rounded-full ${isCurrentUser ? 'bg-green-500' : 'bg-blue-500'} flex items-center justify-center font-bold text-sm text-white">
+                                ${(user.name || 'A').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusDotColor} border-2 border-white"></span>
                         </div>
                         <div>
                             <p class="font-semibold text-gray-800">${user.name || 'Người dùng ẩn danh'} ${isCurrentUser ? '<span class="text-xs font-normal text-green-600">(Bạn)</span>' : ''}</p>
-                            <p class="text-xs text-gray-500">Tốc độ: ${user.lastSpeed?.toFixed(1) || 0} km/h</p>
+                            <p class="text-xs text-gray-500">${statusText}</p>
                         </div>
                     </div>
                 `;
